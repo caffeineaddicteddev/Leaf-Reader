@@ -104,7 +104,6 @@ That's it. No billing setup. No project configuration.
 - Open Leaf on your phone
 - Tap the **Settings** tab (bottom navigation bar)
 - Paste your key into the **Google AI Studio API Key** field
-- Tap Save
 
 Your key is stored locally on your device. It is only ever sent to Google's own API — never to any third-party server.
 
