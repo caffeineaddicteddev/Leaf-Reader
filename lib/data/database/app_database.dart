@@ -21,7 +21,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -41,6 +41,11 @@ class AppDatabase extends _$AppDatabase {
           SettingsCompanion.insert(key: 'library_path', value: ''),
         ]);
       });
+    },
+    onUpgrade: (Migrator migrator, int from, int to) async {
+      if (from < 2) {
+        await migrator.addColumn(books, books.lastReadPage);
+      }
     },
   );
 }

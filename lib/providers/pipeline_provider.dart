@@ -22,7 +22,7 @@ import 'settings_provider.dart';
 
 enum PipelineCancelResult { none, deleted, keptOcr }
 
-enum _CancelMode { none, deleteBook, keepOcr }
+enum _CancelMode { none, deleteBook, keepOcr, disableAi }
 
 class PipelineNotifier extends StateNotifier<ProcessingStatus> {
   PipelineNotifier(this._ref, this._bookId)
@@ -46,6 +46,7 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
   final ReaderAiService _readerAiService;
 
   bool _cancelRequested = false;
+  bool _disableAiRequested = false;
   _CancelMode _cancelMode = _CancelMode.none;
   Future<void>? _activeTask;
 
@@ -54,6 +55,7 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
       return _activeTask;
     }
     _cancelRequested = false;
+    _disableAiRequested = false;
     _cancelMode = _CancelMode.none;
     state = const ProcessingStatus(
       phase: ProcessingPhase.ocr,
@@ -81,9 +83,13 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
     final ProcessingContinuationState persisted = await _processingStateManager
         .read(statePath);
     if (!persisted.bootstrapComplete || persisted.continuationMode == 'none') {
-      return;
+      if (!persisted.ocrPending &&
+          (!persisted.aiPending || !persisted.aiEnabledForBook)) {
+        return;
+      }
     }
     _cancelRequested = false;
+    _disableAiRequested = false;
     _cancelMode = _CancelMode.none;
     _activeTask = _runContinuation();
     return _activeTask;
@@ -107,6 +113,7 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
     return switch (_cancelMode) {
       _CancelMode.keepOcr => PipelineCancelResult.keptOcr,
       _CancelMode.deleteBook => PipelineCancelResult.deleted,
+      _CancelMode.disableAi => PipelineCancelResult.none,
       _CancelMode.none => PipelineCancelResult.none,
     };
   }
@@ -125,6 +132,55 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
     }
     await _deleteBookAssets(book);
     state = ProcessingStatus.idle();
+  }
+
+  Future<void> setBookAiMode({required bool enabled}) async {
+    final Book? book = await _bookRepository.getBook(_bookId);
+    if (book == null) {
+      return;
+    }
+    final String statePath = await _fileService.getProcessingStatePath(
+      book.folderName,
+    );
+    ProcessingContinuationState current = await _processingStateManager.read(
+      statePath,
+    );
+    if (current.bookId.isEmpty) {
+      current = ProcessingContinuationState.initial(book.id).copyWith(
+        bootstrapComplete: true,
+        readerReady: true,
+        continuationMode: book.ocrProgress < book.totalPages
+            ? 'ocr_only'
+            : 'none',
+        aiEnabledForBook: enabled,
+        aiCanceledByUser: !enabled,
+        ocrPending: book.ocrProgress < book.totalPages,
+        aiPending: book.aiProgress < book.totalPages,
+        nextOcrPage: book.ocrProgress + 1,
+        nextAiPage: book.aiProgress > 0 ? book.aiProgress + 1 : 1,
+      );
+      await _processingStateManager.write(filePath: statePath, state: current);
+    }
+
+    final bool hasRemainingAi = _hasRemainingAiWork(current, book.totalPages);
+    final ProcessingContinuationState next = current.copyWith(
+      aiEnabledForBook: enabled,
+      aiCanceledByUser: !enabled,
+      aiPending: hasRemainingAi,
+    );
+    await _processingStateManager.write(
+      filePath: statePath,
+      state: next.copyWith(continuationMode: _continuationModeForState(next)),
+    );
+
+    if (!enabled) {
+      _disableAiRequested = true;
+      _cancelMode = _CancelMode.disableAi;
+      return;
+    }
+
+    _disableAiRequested = false;
+    await continueFromReader();
   }
 
   Future<void> _runBootstrap() async {
@@ -163,6 +219,10 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
         filePath: statePath,
         state: ProcessingContinuationState.initial(book.id).copyWith(
           continuationMode: aiEnabled ? 'staged_ai' : 'ocr_only',
+          aiEnabledForBook: aiEnabled,
+          aiCanceledByUser: !aiEnabled,
+          ocrPending: true,
+          aiPending: aiEnabled,
           nextOcrPage: 1,
           nextAiPage: 1,
           nextAiCharOffset: 0,
@@ -220,6 +280,10 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
           bootstrapComplete: true,
           readerReady: true,
           continuationMode: hasContinuation ? continuationMode : 'none',
+          aiEnabledForBook: aiEnabled,
+          aiCanceledByUser: !aiEnabled,
+          ocrPending: hasContinuation,
+          aiPending: aiEnabled && hasContinuation,
           nextOcrPage: bootstrapEnd + 1,
           nextAiPage: aiEnabled ? current.nextAiPage : 1,
           nextAiCharOffset: aiEnabled ? current.nextAiCharOffset : 0,
@@ -276,12 +340,13 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
           .read(statePath);
       final int totalPages = book.totalPages;
       if (!continuation.bootstrapComplete ||
-          continuation.continuationMode == 'none') {
+          (!continuation.ocrPending &&
+              (!continuation.aiPending || !continuation.aiEnabledForBook))) {
         return;
       }
 
       final OcrLanguage language = LanguageRegistry.byCode(book.languageCode);
-      if (continuation.nextOcrPage <= totalPages) {
+      if (continuation.ocrPending && continuation.nextOcrPage <= totalPages) {
         await _prepareLanguage(language, totalPages, statePath);
         await _runOcr(
           bookId: book.id,
@@ -300,13 +365,16 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
           filePath: statePath,
           transform: (ProcessingContinuationState current) => current.copyWith(
             nextOcrPage: totalPages + 1,
+            ocrPending: false,
             nativeOcrActive: false,
           ),
         );
       }
 
       continuation = await _processingStateManager.read(statePath);
-      if (continuation.continuationMode == 'staged_ai') {
+      if (continuation.aiEnabledForBook &&
+          continuation.aiPending &&
+          continuation.continuationMode == 'staged_ai') {
         final AppSettings settings = await _ref.read(settingsProvider.future);
         if (!continuation.firstGeminiBatchComplete) {
           await _runBootstrapGeminiCleanup(
@@ -339,7 +407,11 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
           await _processingStateManager.update(
             filePath: statePath,
             transform: (ProcessingContinuationState current) =>
-                current.copyWith(nextAiPage: nextAiPage, nextAiCharOffset: 0),
+                current.copyWith(
+                  nextAiPage: nextAiPage,
+                  nextAiCharOffset: 0,
+                  aiPending: nextAiPage <= totalPages,
+                ),
           );
           if (await _handleCancellation(book, statePath)) {
             return;
@@ -347,28 +419,45 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
         }
       }
 
+      continuation = await _processingStateManager.read(statePath);
       await _processingStateManager.update(
         filePath: statePath,
-        transform: (ProcessingContinuationState current) => current.copyWith(
-          continuationMode: 'none',
-          nextAiCharOffset: 0,
-          nativeOcrActive: false,
-        ),
+        transform: (ProcessingContinuationState current) {
+          final ProcessingContinuationState next = current.copyWith(
+            nextAiCharOffset: 0,
+            nativeOcrActive: false,
+          );
+          return next.copyWith(
+            continuationMode: _continuationModeForState(next),
+          );
+        },
       );
+      continuation = await _processingStateManager.read(statePath);
+      final Book? latestBook = await _bookRepository.getBook(_bookId);
       await _bookRepository.updateProgress(
         id: book.id,
         ocrProgress: totalPages,
-        aiProgress: continuation.continuationMode == 'staged_ai'
+        aiProgress:
+            continuation.aiEnabledForBook &&
+                continuation.continuationMode == 'none' &&
+                !continuation.aiPending
             ? totalPages
-            : 0,
-        status: BookProcessingState.ready.name,
+            : (latestBook?.aiProgress ?? 0),
+        status: continuation.continuationMode == 'none'
+            ? BookProcessingState.ready.name
+            : BookProcessingState.processing.name,
       );
       state = ProcessingStatus(
-        phase: ProcessingPhase.done,
-        currentPage: totalPages,
+        phase: continuation.continuationMode == 'none'
+            ? ProcessingPhase.done
+            : ProcessingPhase.idle,
+        currentPage: continuation.continuationMode == 'none' ? totalPages : 0,
         totalPages: totalPages,
         ocrCompletedPages: totalPages,
-        aiCompletedPages: continuation.continuationMode == 'staged_ai'
+        aiCompletedPages:
+            continuation.continuationMode == 'none' &&
+                continuation.aiEnabledForBook &&
+                !continuation.aiPending
             ? totalPages
             : 0,
         readerReady: true,
@@ -408,7 +497,7 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
       book: book,
       apiKey: settings.aiApiKey,
       geminiModel: settings.geminiModel,
-      shouldCancel: () => _cancelRequested,
+      shouldCancel: () => _cancelRequested || _disableAiRequested,
       onProgress: (int currentPage, int _) async {
         state = ProcessingStatus(
           phase: ProcessingPhase.aiCleanup,
@@ -430,6 +519,7 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
       filePath: statePath,
       transform: (ProcessingContinuationState current) => current.copyWith(
         firstGeminiBatchComplete: true,
+        aiPending: totalPages > 10,
         nextAiPage: bootstrapCursor.pageIndex >= 10 ? 11 : 10,
         nextAiCharOffset: bootstrapCursor.pageIndex >= 10
             ? 0
@@ -453,7 +543,7 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
       startPage: startPage,
       startCharOffset: startCharOffset,
       totalPages: totalPages,
-      shouldCancel: () => _cancelRequested,
+      shouldCancel: () => _cancelRequested || _disableAiRequested,
       onProgress: (int currentPage, int _) async {
         state = ProcessingStatus(
           phase: ProcessingPhase.aiCleanup,
@@ -480,7 +570,7 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
   }
 
   Future<bool> _handleCancellation(Book book, String statePath) async {
-    if (!_cancelRequested) {
+    if (!_cancelRequested && !_disableAiRequested) {
       return false;
     }
     final ProcessingContinuationState current = await _processingStateManager
@@ -488,15 +578,27 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
     switch (_cancelMode) {
       case _CancelMode.deleteBook:
         await _deleteBookAssets(book);
+        break;
       case _CancelMode.keepOcr:
         await _processingStateManager.write(
           filePath: statePath,
           state: current.copyWith(
             bootstrapComplete: true,
             readerReady: true,
-            continuationMode: current.continuationMode == 'none'
-                ? 'staged_ai'
-                : current.continuationMode,
+            aiEnabledForBook: false,
+            aiCanceledByUser: true,
+            ocrPending: state.ocrCompletedPages < book.totalPages,
+            aiPending: _hasRemainingAiWork(current, book.totalPages),
+            continuationMode: state.ocrCompletedPages < book.totalPages
+                ? 'ocr_only'
+                : _continuationModeForState(
+                    current.copyWith(
+                      aiEnabledForBook: false,
+                      aiCanceledByUser: true,
+                      ocrPending: false,
+                      aiPending: _hasRemainingAiWork(current, book.totalPages),
+                    ),
+                  ),
             nextOcrPage: state.ocrCompletedPages + 1,
             nextAiPage: current.firstGeminiBatchComplete
                 ? current.nextAiPage
@@ -511,10 +613,29 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
           aiProgress: state.aiCompletedPages,
           status: BookProcessingState.processing.name,
         );
+        break;
+      case _CancelMode.disableAi:
+        final ProcessingContinuationState next = current.copyWith(
+          bootstrapComplete: true,
+          readerReady: true,
+          aiEnabledForBook: false,
+          aiCanceledByUser: true,
+          aiPending: _hasRemainingAiWork(current, book.totalPages),
+          nativeOcrActive: false,
+        );
+        await _processingStateManager.write(
+          filePath: statePath,
+          state: next.copyWith(
+            continuationMode: _continuationModeForState(next),
+          ),
+        );
+        break;
       case _CancelMode.none:
         break;
     }
     state = ProcessingStatus.idle();
+    _cancelRequested = false;
+    _disableAiRequested = false;
     return true;
   }
 
@@ -670,6 +791,20 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
         status: BookProcessingState.error.name,
       );
     }
+  }
+
+  bool _hasRemainingAiWork(ProcessingContinuationState state, int totalPages) {
+    return !state.firstGeminiBatchComplete || state.nextAiPage <= totalPages;
+  }
+
+  String _continuationModeForState(ProcessingContinuationState state) {
+    if (state.aiPending) {
+      return 'staged_ai';
+    }
+    if (state.ocrPending) {
+      return state.aiEnabledForBook ? 'staged_ai' : 'ocr_only';
+    }
+    return 'none';
   }
 }
 

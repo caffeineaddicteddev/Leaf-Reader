@@ -11,6 +11,7 @@ class Book {
     required this.totalPages,
     required this.ocrProgress,
     required this.aiProgress,
+    required this.lastReadPage,
     required this.languageCode,
     required this.status,
     required this.fileSize,
@@ -27,6 +28,7 @@ class Book {
   final int totalPages;
   final int ocrProgress;
   final int aiProgress;
+  final int lastReadPage;
   final String languageCode;
   final BookProcessingState status;
   final int fileSize;

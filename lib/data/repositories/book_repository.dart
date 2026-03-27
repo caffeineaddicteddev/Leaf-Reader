@@ -64,6 +64,16 @@ class BookRepository {
     );
   }
 
+  Future<void> updateLastReadPage({
+    required String id,
+    required int lastReadPage,
+  }) {
+    return _database.booksDao.updateLastReadPage(
+      id: id,
+      lastReadPage: lastReadPage,
+    );
+  }
+
   domain.Book _mapBook(Book row) {
     return domain.Book(
       id: row.id,
@@ -75,6 +85,7 @@ class BookRepository {
       totalPages: row.totalPages,
       ocrProgress: row.ocrProgress,
       aiProgress: row.aiProgress,
+      lastReadPage: row.lastReadPage,
       languageCode: row.languageCode,
       status: BookProcessingState.values.firstWhere(
         (BookProcessingState state) => state.name == row.status,

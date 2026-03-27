@@ -89,17 +89,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                       int index,
                     ) {
                       final book = books[index];
-                      final bool readerAvailable =
-                          book.status == BookProcessingState.ready ||
-                          book.aiProgress >=
-                              (book.totalPages < 10 ? book.totalPages : 10);
                       return BookCard(
                         book: book,
-                        onTap: () => context.go(
-                          readerAvailable
-                              ? AppRoutes.reader(book.id)
-                              : AppRoutes.processing(book.id),
-                        ),
+                        onTap: () => context.go(AppRoutes.reader(book.id)),
                         onLongPressStart: (_) => _showBookMenu(context, book),
                       );
                     }, childCount: books.length),
@@ -122,6 +114,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final TextEditingController authorController = TextEditingController(
       text: book.author,
     );
+    final ValueNotifier<bool> hasChanges = ValueNotifier<bool>(false);
+
+    void refreshDirtyState() {
+      hasChanges.value =
+          nameController.text.trim() != book.name ||
+          authorController.text.trim() != book.author;
+    }
+
+    nameController.addListener(refreshDirtyState);
+    authorController.addListener(refreshDirtyState);
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -156,27 +158,41 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   controller: authorController,
                   decoration: const InputDecoration(labelText: 'Author'),
                 ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () async {
-                      final NavigatorState navigator = Navigator.of(context);
-                      await ref
-                          .read(bookRepositoryProvider)
-                          .updateMetadata(
-                            id: book.id,
-                            name: nameController.text.trim().isEmpty
-                                ? book.name
-                                : nameController.text.trim(),
-                            author: authorController.text.trim(),
-                          );
-                      ref.invalidate(booksProvider);
-                      ref.invalidate(bookProvider(book.id));
-                      navigator.pop();
-                    },
-                    child: const Text('Save Changes'),
-                  ),
+                ValueListenableBuilder<bool>(
+                  valueListenable: hasChanges,
+                  builder: (BuildContext context, bool isDirty, _) {
+                    if (!isDirty) {
+                      return const SizedBox(height: 16);
+                    }
+                    return Column(
+                      children: <Widget>[
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: () async {
+                              final NavigatorState navigator = Navigator.of(
+                                context,
+                              );
+                              await ref
+                                  .read(bookRepositoryProvider)
+                                  .updateMetadata(
+                                    id: book.id,
+                                    name: nameController.text.trim().isEmpty
+                                        ? book.name
+                                        : nameController.text.trim(),
+                                    author: authorController.text.trim(),
+                                  );
+                              ref.invalidate(booksProvider);
+                              ref.invalidate(bookProvider(book.id));
+                              navigator.pop();
+                            },
+                            child: const Text('Save Changes'),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
@@ -198,6 +214,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         );
       },
     );
+    hasChanges.dispose();
     nameController.dispose();
     authorController.dispose();
   }

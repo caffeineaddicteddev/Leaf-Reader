@@ -32,107 +32,114 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
         }
       });
     }
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          onPressed: () => context.go(AppRoutes.library),
-          icon: const Icon(Icons.arrow_back),
-          tooltip: 'Back to library',
-        ),
-        actions: <Widget>[
-          IconButton(
-            onPressed: () async {
-              await ref.read(pipelineProvider(bookId).notifier).deleteBook();
-              ref.invalidate(bookProvider(bookId));
-              if (context.mounted) {
-                context.go(AppRoutes.library);
-              }
-            },
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Delete book',
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (!didPop && mounted) {
+          context.go(AppRoutes.library);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            onPressed: () => context.go(AppRoutes.library),
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Back to library',
           ),
-        ],
-      ),
-      body: bookAsync.when(
-        data: (book) {
-          if (book == null) {
-            return const Center(child: Text('Book not found.'));
-          }
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(999),
-                    child: SizedBox(
-                      width: 220,
-                      child: const LinearProgressIndicator(minHeight: 8),
+          actions: <Widget>[
+            IconButton(
+              onPressed: () async {
+                await ref.read(pipelineProvider(bookId).notifier).deleteBook();
+                ref.invalidate(bookProvider(bookId));
+                if (context.mounted) {
+                  context.go(AppRoutes.library);
+                }
+              },
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Delete book',
+            ),
+          ],
+        ),
+        body: bookAsync.when(
+          data: (book) {
+            if (book == null) {
+              return const Center(child: Text('Book not found.'));
+            }
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: SizedBox(
+                        width: 220,
+                        child: const LinearProgressIndicator(minHeight: 8),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    book.name,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _phaseLabel(status),
-                    style: Theme.of(context).textTheme.titleMedium,
-                    textAlign: TextAlign.center,
-                  ),
-                  if (status.totalPages > 0 &&
-                      status.currentPage > 0 &&
-                      status.phase != ProcessingPhase.done &&
-                      status.phase != ProcessingPhase.error) ...<Widget>[
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 20),
                     Text(
-                      _progressLabel(status),
-                      style: Theme.of(context).textTheme.bodyMedium,
+                      book.name,
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                      textAlign: TextAlign.center,
                     ),
-                  ],
-                  if (status.errorMessage != null &&
-                      status.errorMessage!.isNotEmpty) ...<Widget>[
                     const SizedBox(height: 8),
                     Text(
-                      status.errorMessage!,
+                      _phaseLabel(status),
+                      style: Theme.of(context).textTheme.titleMedium,
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    if (status.totalPages > 0 &&
+                        status.currentPage > 0 &&
+                        status.phase != ProcessingPhase.done &&
+                        status.phase != ProcessingPhase.error) ...<Widget>[
+                      const SizedBox(height: 6),
+                      Text(
+                        _progressLabel(status),
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                    if (status.errorMessage != null &&
+                        status.errorMessage!.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 8),
+                      Text(
+                        status.errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    FilledButton.tonal(
+                      onPressed: () async {
+                        final PipelineCancelResult result = await ref
+                            .read(pipelineProvider(bookId).notifier)
+                            .cancelPipeline();
+                        ref.invalidate(bookProvider(bookId));
+                        if (!context.mounted) {
+                          return;
+                        }
+                        switch (result) {
+                          case PipelineCancelResult.deleted:
+                            context.go(AppRoutes.library);
+                          case PipelineCancelResult.keptOcr:
+                            context.go(AppRoutes.reader(bookId));
+                          case PipelineCancelResult.none:
+                            context.go(AppRoutes.library);
+                        }
+                      },
+                      child: const Text('Cancel Task'),
                     ),
                   ],
-                  const SizedBox(height: 20),
-                  FilledButton.tonal(
-                    onPressed: () async {
-                      final PipelineCancelResult result = await ref
-                          .read(pipelineProvider(bookId).notifier)
-                          .cancelPipeline();
-                      ref.invalidate(bookProvider(bookId));
-                      if (!context.mounted) {
-                        return;
-                      }
-                      switch (result) {
-                        case PipelineCancelResult.deleted:
-                          context.go(AppRoutes.library);
-                        case PipelineCancelResult.keptOcr:
-                          context.go(AppRoutes.reader(bookId));
-                        case PipelineCancelResult.none:
-                          context.go(AppRoutes.library);
-                      }
-                    },
-                    child: const Text('Cancel Task'),
-                  ),
-                ],
+                ),
               ),
-            ),
-          );
-        },
-        error: (Object error, StackTrace stackTrace) =>
-            Center(child: Text('$error')),
-        loading: () => const Center(child: CircularProgressIndicator()),
+            );
+          },
+          error: (Object error, StackTrace stackTrace) =>
+              Center(child: Text('$error')),
+          loading: () => const Center(child: CircularProgressIndicator()),
+        ),
       ),
     );
   }

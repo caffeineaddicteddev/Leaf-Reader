@@ -106,6 +106,18 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _lastReadPageMeta = const VerificationMeta(
+    'lastReadPage',
+  );
+  @override
+  late final GeneratedColumn<int> lastReadPage = GeneratedColumn<int>(
+    'last_read_page',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
   static const VerificationMeta _languageCodeMeta = const VerificationMeta(
     'languageCode',
   );
@@ -173,6 +185,7 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     totalPages,
     ocrProgress,
     aiProgress,
+    lastReadPage,
     languageCode,
     status,
     fileSize,
@@ -254,6 +267,15 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
       context.handle(
         _aiProgressMeta,
         aiProgress.isAcceptableOrUnknown(data['ai_progress']!, _aiProgressMeta),
+      );
+    }
+    if (data.containsKey('last_read_page')) {
+      context.handle(
+        _lastReadPageMeta,
+        lastReadPage.isAcceptableOrUnknown(
+          data['last_read_page']!,
+          _lastReadPageMeta,
+        ),
       );
     }
     if (data.containsKey('language_code')) {
@@ -338,6 +360,10 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
         DriftSqlType.int,
         data['${effectivePrefix}ai_progress'],
       )!,
+      lastReadPage: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_read_page'],
+      )!,
       languageCode: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}language_code'],
@@ -377,6 +403,7 @@ class Book extends DataClass implements Insertable<Book> {
   final int totalPages;
   final int ocrProgress;
   final int aiProgress;
+  final int lastReadPage;
   final String languageCode;
   final String status;
   final int fileSize;
@@ -392,6 +419,7 @@ class Book extends DataClass implements Insertable<Book> {
     required this.totalPages,
     required this.ocrProgress,
     required this.aiProgress,
+    required this.lastReadPage,
     required this.languageCode,
     required this.status,
     required this.fileSize,
@@ -412,6 +440,7 @@ class Book extends DataClass implements Insertable<Book> {
     map['total_pages'] = Variable<int>(totalPages);
     map['ocr_progress'] = Variable<int>(ocrProgress);
     map['ai_progress'] = Variable<int>(aiProgress);
+    map['last_read_page'] = Variable<int>(lastReadPage);
     map['language_code'] = Variable<String>(languageCode);
     map['status'] = Variable<String>(status);
     map['file_size'] = Variable<int>(fileSize);
@@ -433,6 +462,7 @@ class Book extends DataClass implements Insertable<Book> {
       totalPages: Value(totalPages),
       ocrProgress: Value(ocrProgress),
       aiProgress: Value(aiProgress),
+      lastReadPage: Value(lastReadPage),
       languageCode: Value(languageCode),
       status: Value(status),
       fileSize: Value(fileSize),
@@ -456,6 +486,7 @@ class Book extends DataClass implements Insertable<Book> {
       totalPages: serializer.fromJson<int>(json['totalPages']),
       ocrProgress: serializer.fromJson<int>(json['ocrProgress']),
       aiProgress: serializer.fromJson<int>(json['aiProgress']),
+      lastReadPage: serializer.fromJson<int>(json['lastReadPage']),
       languageCode: serializer.fromJson<String>(json['languageCode']),
       status: serializer.fromJson<String>(json['status']),
       fileSize: serializer.fromJson<int>(json['fileSize']),
@@ -476,6 +507,7 @@ class Book extends DataClass implements Insertable<Book> {
       'totalPages': serializer.toJson<int>(totalPages),
       'ocrProgress': serializer.toJson<int>(ocrProgress),
       'aiProgress': serializer.toJson<int>(aiProgress),
+      'lastReadPage': serializer.toJson<int>(lastReadPage),
       'languageCode': serializer.toJson<String>(languageCode),
       'status': serializer.toJson<String>(status),
       'fileSize': serializer.toJson<int>(fileSize),
@@ -494,6 +526,7 @@ class Book extends DataClass implements Insertable<Book> {
     int? totalPages,
     int? ocrProgress,
     int? aiProgress,
+    int? lastReadPage,
     String? languageCode,
     String? status,
     int? fileSize,
@@ -509,6 +542,7 @@ class Book extends DataClass implements Insertable<Book> {
     totalPages: totalPages ?? this.totalPages,
     ocrProgress: ocrProgress ?? this.ocrProgress,
     aiProgress: aiProgress ?? this.aiProgress,
+    lastReadPage: lastReadPage ?? this.lastReadPage,
     languageCode: languageCode ?? this.languageCode,
     status: status ?? this.status,
     fileSize: fileSize ?? this.fileSize,
@@ -536,6 +570,9 @@ class Book extends DataClass implements Insertable<Book> {
       aiProgress: data.aiProgress.present
           ? data.aiProgress.value
           : this.aiProgress,
+      lastReadPage: data.lastReadPage.present
+          ? data.lastReadPage.value
+          : this.lastReadPage,
       languageCode: data.languageCode.present
           ? data.languageCode.value
           : this.languageCode,
@@ -558,6 +595,7 @@ class Book extends DataClass implements Insertable<Book> {
           ..write('totalPages: $totalPages, ')
           ..write('ocrProgress: $ocrProgress, ')
           ..write('aiProgress: $aiProgress, ')
+          ..write('lastReadPage: $lastReadPage, ')
           ..write('languageCode: $languageCode, ')
           ..write('status: $status, ')
           ..write('fileSize: $fileSize, ')
@@ -578,6 +616,7 @@ class Book extends DataClass implements Insertable<Book> {
     totalPages,
     ocrProgress,
     aiProgress,
+    lastReadPage,
     languageCode,
     status,
     fileSize,
@@ -597,6 +636,7 @@ class Book extends DataClass implements Insertable<Book> {
           other.totalPages == this.totalPages &&
           other.ocrProgress == this.ocrProgress &&
           other.aiProgress == this.aiProgress &&
+          other.lastReadPage == this.lastReadPage &&
           other.languageCode == this.languageCode &&
           other.status == this.status &&
           other.fileSize == this.fileSize &&
@@ -614,6 +654,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
   final Value<int> totalPages;
   final Value<int> ocrProgress;
   final Value<int> aiProgress;
+  final Value<int> lastReadPage;
   final Value<String> languageCode;
   final Value<String> status;
   final Value<int> fileSize;
@@ -630,6 +671,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     this.totalPages = const Value.absent(),
     this.ocrProgress = const Value.absent(),
     this.aiProgress = const Value.absent(),
+    this.lastReadPage = const Value.absent(),
     this.languageCode = const Value.absent(),
     this.status = const Value.absent(),
     this.fileSize = const Value.absent(),
@@ -647,6 +689,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     this.totalPages = const Value.absent(),
     this.ocrProgress = const Value.absent(),
     this.aiProgress = const Value.absent(),
+    this.lastReadPage = const Value.absent(),
     this.languageCode = const Value.absent(),
     this.status = const Value.absent(),
     this.fileSize = const Value.absent(),
@@ -669,6 +712,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     Expression<int>? totalPages,
     Expression<int>? ocrProgress,
     Expression<int>? aiProgress,
+    Expression<int>? lastReadPage,
     Expression<String>? languageCode,
     Expression<String>? status,
     Expression<int>? fileSize,
@@ -686,6 +730,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
       if (totalPages != null) 'total_pages': totalPages,
       if (ocrProgress != null) 'ocr_progress': ocrProgress,
       if (aiProgress != null) 'ai_progress': aiProgress,
+      if (lastReadPage != null) 'last_read_page': lastReadPage,
       if (languageCode != null) 'language_code': languageCode,
       if (status != null) 'status': status,
       if (fileSize != null) 'file_size': fileSize,
@@ -705,6 +750,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     Value<int>? totalPages,
     Value<int>? ocrProgress,
     Value<int>? aiProgress,
+    Value<int>? lastReadPage,
     Value<String>? languageCode,
     Value<String>? status,
     Value<int>? fileSize,
@@ -722,6 +768,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
       totalPages: totalPages ?? this.totalPages,
       ocrProgress: ocrProgress ?? this.ocrProgress,
       aiProgress: aiProgress ?? this.aiProgress,
+      lastReadPage: lastReadPage ?? this.lastReadPage,
       languageCode: languageCode ?? this.languageCode,
       status: status ?? this.status,
       fileSize: fileSize ?? this.fileSize,
@@ -761,6 +808,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
     if (aiProgress.present) {
       map['ai_progress'] = Variable<int>(aiProgress.value);
     }
+    if (lastReadPage.present) {
+      map['last_read_page'] = Variable<int>(lastReadPage.value);
+    }
     if (languageCode.present) {
       map['language_code'] = Variable<String>(languageCode.value);
     }
@@ -794,6 +844,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
           ..write('totalPages: $totalPages, ')
           ..write('ocrProgress: $ocrProgress, ')
           ..write('aiProgress: $aiProgress, ')
+          ..write('lastReadPage: $lastReadPage, ')
           ..write('languageCode: $languageCode, ')
           ..write('status: $status, ')
           ..write('fileSize: $fileSize, ')
@@ -1446,6 +1497,7 @@ typedef $$BooksTableCreateCompanionBuilder =
       Value<int> totalPages,
       Value<int> ocrProgress,
       Value<int> aiProgress,
+      Value<int> lastReadPage,
       Value<String> languageCode,
       Value<String> status,
       Value<int> fileSize,
@@ -1464,6 +1516,7 @@ typedef $$BooksTableUpdateCompanionBuilder =
       Value<int> totalPages,
       Value<int> ocrProgress,
       Value<int> aiProgress,
+      Value<int> lastReadPage,
       Value<String> languageCode,
       Value<String> status,
       Value<int> fileSize,
@@ -1522,6 +1575,11 @@ class $$BooksTableFilterComposer extends Composer<_$AppDatabase, $BooksTable> {
 
   ColumnFilters<int> get aiProgress => $composableBuilder(
     column: $table.aiProgress,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastReadPage => $composableBuilder(
+    column: $table.lastReadPage,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1605,6 +1663,11 @@ class $$BooksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get lastReadPage => $composableBuilder(
+    column: $table.lastReadPage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get languageCode => $composableBuilder(
     column: $table.languageCode,
     builder: (column) => ColumnOrderings(column),
@@ -1677,6 +1740,11 @@ class $$BooksTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get lastReadPage => $composableBuilder(
+    column: $table.lastReadPage,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get languageCode => $composableBuilder(
     column: $table.languageCode,
     builder: (column) => column,
@@ -1732,6 +1800,7 @@ class $$BooksTableTableManager
                 Value<int> totalPages = const Value.absent(),
                 Value<int> ocrProgress = const Value.absent(),
                 Value<int> aiProgress = const Value.absent(),
+                Value<int> lastReadPage = const Value.absent(),
                 Value<String> languageCode = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<int> fileSize = const Value.absent(),
@@ -1748,6 +1817,7 @@ class $$BooksTableTableManager
                 totalPages: totalPages,
                 ocrProgress: ocrProgress,
                 aiProgress: aiProgress,
+                lastReadPage: lastReadPage,
                 languageCode: languageCode,
                 status: status,
                 fileSize: fileSize,
@@ -1766,6 +1836,7 @@ class $$BooksTableTableManager
                 Value<int> totalPages = const Value.absent(),
                 Value<int> ocrProgress = const Value.absent(),
                 Value<int> aiProgress = const Value.absent(),
+                Value<int> lastReadPage = const Value.absent(),
                 Value<String> languageCode = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<int> fileSize = const Value.absent(),
@@ -1782,6 +1853,7 @@ class $$BooksTableTableManager
                 totalPages: totalPages,
                 ocrProgress: ocrProgress,
                 aiProgress: aiProgress,
+                lastReadPage: lastReadPage,
                 languageCode: languageCode,
                 status: status,
                 fileSize: fileSize,

@@ -10,11 +10,13 @@ class ReaderBlock {
     required this.pageLabel,
     required this.text,
     required this.aiCorrected,
+    required this.sourcePages,
   });
 
   final String pageLabel;
   final String text;
   final bool aiCorrected;
+  final List<int> sourcePages;
 }
 
 class ReaderContentService {
@@ -46,6 +48,7 @@ class ReaderContentService {
               pageLabel: 'Page ${page.page}',
               text: page.text,
               aiCorrected: false,
+              sourcePages: <int>[page.page],
             ),
           )
           .toList(growable: false);
@@ -72,6 +75,7 @@ class ReaderContentService {
           pageLabel: pageLabel,
           text: cleanPage.text,
           aiCorrected: true,
+          sourcePages: sourcePages,
         ),
       );
     }
@@ -85,6 +89,7 @@ class ReaderContentService {
           pageLabel: 'Page ${ocrPage.page}',
           text: ocrPage.text,
           aiCorrected: false,
+          sourcePages: <int>[ocrPage.page],
         ),
       );
     }

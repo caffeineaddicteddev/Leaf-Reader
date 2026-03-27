@@ -63,6 +63,20 @@ class BooksDao extends DatabaseAccessor<AppDatabase> with _$BooksDaoMixin {
     );
   }
 
+  Future<void> updateLastReadPage({
+    required String id,
+    required int lastReadPage,
+  }) {
+    return (update(
+      books,
+    )..where(($BooksTable table) => table.id.equals(id))).write(
+      BooksCompanion(
+        lastReadPage: Value<int>(lastReadPage),
+        updatedAt: Value<String>(DateTime.now().toIso8601String()),
+      ),
+    );
+  }
+
   Future<void> updateCoverPath({
     required String id,
     required String? coverPath,
