@@ -108,7 +108,7 @@ Your key is stored locally on your device. It is only ever sent to Google's own 
 
 ### Free tier limits
 
-As of 2025, Google AI Studio's free tier includes:
+As of 2026, Google AI Studio's free tier includes:
 
 | Model | Free limit |
 |---|---|
