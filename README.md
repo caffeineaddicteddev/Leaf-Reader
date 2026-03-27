@@ -222,10 +222,10 @@ Bengali and English traineddata files are bundled in the APK. All other Tesserac
 
 ### AI pipeline
 
-**Pages 1–10 — Gemini 2.5 Flash**
+**Pages 1–10 — Gemini**
 Early pages of scanned books often contain prefaces, tables of contents, and publisher information that are not part of the actual book content. Gemini strips this material and outputs only the book's narrative content, corrected for OCR errors. If Gemini is rate-limited, the pipeline waits 30 seconds and retries automatically.
 
-**Pages 11+ — Gemma 3 cascade**
+**Pages 11+ — Gemma**
 Once past the preliminary pages, Gemma 3 27B handles correction only — no restructuring, no stripping, just fixing what OCR got wrong. If 27B is busy, it falls back to 12B, then 4B, with automatic retry.
 
 **Tokenizer**
