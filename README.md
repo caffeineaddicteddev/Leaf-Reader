@@ -66,9 +66,8 @@ You can start reading before the full book finishes processing. The first page a
 > Minimum Android version: Android 8.0 (API 26)
 
 | Channel | Link |
-|---|---|
-| **Alpha** | [Download APK](https://github.com/caffeineaddicteddev/leaf/releases/latest) |
-| **All releases** | [GitHub Releases](https://github.com/caffeineaddicteddev/leaf/releases) |
+|---|
+| **Alpha** | [Download APK](https://github.com/caffeineaddicteddev/Leaf-PDF-Reader/releases) |
 
 **How to install:**
 1. Download the APK from the link above
@@ -113,6 +112,7 @@ As of 2025, Google AI Studio's free tier includes:
 
 | Model | Free limit |
 |---|---|
+| Gemini 3 Flash | 20 requests/day |
 | Gemini 3.1 Flash lite | 500 requests/day |
 | Gemma 3 | 14,400 requests/day |
 
