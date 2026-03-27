@@ -24,8 +24,11 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
+import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -196,25 +199,29 @@ class LeafPlugin : FlutterPlugin, MethodCallHandler {
     private fun ensureMlKitPackage(script: String): String {
         val recognizer = recognizerFor(script)
         val moduleInstallClient = ModuleInstall.getClient(context)
-        val availability = Tasks.await(
-            moduleInstallClient.areModulesAvailable(recognizer as OptionalModuleApi),
-        )
+        val moduleApi = recognizer as OptionalModuleApi
+        var availability = Tasks.await(moduleInstallClient.areModulesAvailable(moduleApi))
         if (availability.areModulesAvailable()) {
             return "ready"
         }
         val request = ModuleInstallRequest.newBuilder()
-            .addApi(recognizer as OptionalModuleApi)
+            .addApi(moduleApi)
             .build()
         return try {
             Tasks.await(moduleInstallClient.installModules(request))
-            "downloading"
+            availability = Tasks.await(moduleInstallClient.areModulesAvailable(moduleApi))
+            if (availability.areModulesAvailable()) "ready" else "failed"
         } catch (_: Exception) {
             "failed"
         }
     }
 
     private fun ensureTessData(tessCode: String): Boolean {
-        return File(context.filesDir, "tessdata/$tessCode.traineddata").exists()
+        val destination = File(context.filesDir, "tessdata/$tessCode.traineddata")
+        if (destination.exists()) {
+            return true
+        }
+        return downloadTessData(tessCode, destination)
     }
 
     private fun recognizerFor(script: String): TextRecognizer {
@@ -268,7 +275,41 @@ class LeafPlugin : FlutterPlugin, MethodCallHandler {
         return argument<Int>(key) ?: throw IllegalArgumentException("Missing argument: $key")
     }
 
+    private fun downloadTessData(tessCode: String, destination: File): Boolean {
+        val sourceUrl = URL("$TESSDATA_BASE_URL/$tessCode.traineddata")
+        var connection: HttpURLConnection? = null
+        return try {
+            destination.parentFile?.mkdirs()
+            connection = (sourceUrl.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 15_000
+                readTimeout = 60_000
+                requestMethod = "GET"
+                instanceFollowRedirects = true
+            }
+            connection.connect()
+            if (connection.responseCode !in 200..299) {
+                false
+            } else {
+                BufferedInputStream(connection.inputStream).use { input ->
+                    FileOutputStream(destination).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                destination.exists() && destination.length() > 0
+            }
+        } catch (_: Exception) {
+            if (destination.exists()) {
+                destination.delete()
+            }
+            false
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
     private companion object {
         const val CHANNEL_NAME = "com.spark.leaf/native"
+        const val TESSDATA_BASE_URL =
+            "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main"
     }
 }

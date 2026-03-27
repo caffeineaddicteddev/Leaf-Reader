@@ -176,7 +176,7 @@ class _CreateBookSheetState extends ConsumerState<CreateBookSheet> {
           updatedAt: DateTime.now().toIso8601String(),
         ),
       );
-      ref.read(pipelineProvider.notifier).startPipeline(bookId);
+      ref.read(pipelineProvider(bookId).notifier).startPipeline();
 
       if (mounted) {
         navigator.pop();

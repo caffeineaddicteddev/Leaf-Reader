@@ -18,13 +18,37 @@ class BookRepository {
     return row == null ? null : _mapBook(row);
   }
 
+  Future<List<domain.Book>> getAllBooks() async {
+    final List<Book> rows = await _database.booksDao.getAllBooks();
+    return rows.map(_mapBook).toList(growable: false);
+  }
+
   Future<void> insertBook(BooksCompanion book) =>
       _database.booksDao.insertBook(book);
 
   Future<void> updateBook(Book book) =>
       _database.booksDao.updateBookEntry(book);
 
+  Future<void> updateMetadata({
+    required String id,
+    required String name,
+    required String author,
+  }) {
+    return _database.booksDao.updateMetadata(
+      id: id,
+      name: name,
+      author: author,
+    );
+  }
+
   Future<void> deleteBook(String id) => _database.booksDao.deleteBookById(id);
+
+  Future<void> updateCoverPath({
+    required String id,
+    required String? coverPath,
+  }) {
+    return _database.booksDao.updateCoverPath(id: id, coverPath: coverPath);
+  }
 
   Future<void> updateProgress({
     required String id,

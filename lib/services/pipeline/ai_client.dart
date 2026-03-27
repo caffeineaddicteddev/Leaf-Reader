@@ -17,11 +17,14 @@ class AiClient {
     required int pageNumber,
     required String prompt,
     required String apiKey,
-    String geminiModel = 'gemini-2.5-flash',
+    String geminiModel = 'gemini-3-flash-preview',
+    List<String> geminiFallbackModels = const <String>[
+      'gemini-3.1-flash-lite-preview',
+      'gemini-2.5-flash',
+    ],
     List<String> gemmaModels = const <String>[
       'gemma-3-27b-it',
       'gemma-3-12b-it',
-      'gemma-3-4b-it',
     ],
   }) async {
     if (apiKey.trim().isEmpty) {
@@ -29,12 +32,26 @@ class AiClient {
     }
 
     if (pageNumber <= 10) {
-      return _requestWithRetry(
-        model: geminiModel,
-        apiKey: apiKey,
-        prompt: prompt,
-        maxAttempts: 3,
-        allowFallback: false,
+      final List<String> geminiModels = <String>[
+        geminiModel,
+        ...geminiFallbackModels,
+      ];
+      for (final String model in geminiModels) {
+        try {
+          return await _requestWithRetry(
+            model: model,
+            apiKey: apiKey,
+            prompt: prompt,
+            maxAttempts: 1,
+            allowFallback: true,
+          );
+        } on AiException {
+          continue;
+        }
+      }
+      throw const AiException(
+        'All Gemini model fallbacks failed.',
+        model: 'gemini',
       );
     }
 
@@ -52,13 +69,9 @@ class AiClient {
       }
     }
 
-    await _delay(const Duration(seconds: 30));
-    return _requestWithRetry(
-      model: gemmaModels.first,
-      apiKey: apiKey,
-      prompt: prompt,
-      maxAttempts: 3,
-      allowFallback: false,
+    throw AiException(
+      'All Gemma model fallbacks failed.',
+      model: gemmaModels.join(', '),
     );
   }
 

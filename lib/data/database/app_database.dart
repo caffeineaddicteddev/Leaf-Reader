@@ -32,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
           SettingsCompanion.insert(key: 'ai_api_key', value: ''),
           SettingsCompanion.insert(
             key: 'gemini_model',
-            value: 'gemini-2.5-flash',
+            value: 'gemini-3-flash-preview',
           ),
           SettingsCompanion.insert(key: 'gemma_model', value: 'gemma-3-27b-it'),
           SettingsCompanion.insert(key: 'ai_mode', value: 'true'),

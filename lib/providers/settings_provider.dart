@@ -29,11 +29,18 @@ final Provider<SettingsRepository> settingsRepositoryProvider =
 final FutureProvider<AppSettings>
 settingsProvider = FutureProvider<AppSettings>((Ref ref) async {
   final SettingsRepository repository = ref.watch(settingsRepositoryProvider);
+  final String rawGeminiModel = await repository.getValue('gemini_model') ?? '';
+  final String geminiModel =
+      rawGeminiModel.isEmpty || rawGeminiModel == 'gemini-2.5-flash'
+      ? 'gemini-3-flash-preview'
+      : rawGeminiModel;
+  if (rawGeminiModel != geminiModel) {
+    await repository.setValue('gemini_model', geminiModel);
+  }
   return AppSettings(
     aiApiKey: await repository.getValue('ai_api_key') ?? '',
     aiMode: (await repository.getValue('ai_mode') ?? 'true') == 'true',
-    geminiModel:
-        await repository.getValue('gemini_model') ?? 'gemini-2.5-flash',
+    geminiModel: geminiModel,
     gemmaModel: await repository.getValue('gemma_model') ?? 'gemma-3-27b-it',
     theme: await repository.getValue('theme') ?? 'light',
     libraryPath: await repository.getValue('library_path') ?? '',

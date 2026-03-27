@@ -1,6 +1,11 @@
+import 'dart:async';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
+import '../../../providers/book_providers.dart';
 import '../../../data/repositories/settings_repository.dart';
 import '../../../providers/settings_provider.dart';
 import '../../widgets/leaf_bottom_nav.dart';
@@ -16,14 +21,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final TextEditingController _apiKeyController = TextEditingController();
   final TextEditingController _geminiController = TextEditingController();
   final TextEditingController _gemmaController = TextEditingController();
+  Timer? _saveDebounce;
   bool _obscureApiKey = true;
   bool _aiMode = true;
   bool _didInitialize = false;
-  bool _isSaving = false;
+  bool _isMigratingStorage = false;
   String _theme = 'system';
 
   @override
   void dispose() {
+    _saveDebounce?.cancel();
     _apiKeyController.dispose();
     _geminiController.dispose();
     _gemmaController.dispose();
@@ -47,7 +54,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           }
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+            padding: const EdgeInsets.fromLTRB(20, 40, 20, 30),
             children: <Widget>[
               Text(
                 'Settings',
@@ -79,6 +86,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         setState(() {
                           _aiMode = value;
                         });
+                        _scheduleSave();
                       },
                     ),
                   ],
@@ -93,6 +101,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       TextField(
                         controller: _apiKeyController,
                         obscureText: _obscureApiKey,
+                        onChanged: (_) => _scheduleSave(),
                         decoration: InputDecoration(
                           labelText: 'Google AI Studio API Key',
                           suffixIcon: IconButton(
@@ -112,6 +121,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: _geminiController,
+                        onChanged: (_) => _scheduleSave(),
                         decoration: const InputDecoration(
                           labelText: 'Gemini Model',
                         ),
@@ -119,6 +129,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: _gemmaController,
+                        onChanged: (_) => _scheduleSave(),
                         decoration: const InputDecoration(
                           labelText: 'Gemma Model',
                         ),
@@ -132,6 +143,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: SegmentedButton<String>(
+                    showSelectedIcon: false,
                     segments: const <ButtonSegment<String>>[
                       ButtonSegment<String>(
                         value: 'light',
@@ -148,6 +160,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       setState(() {
                         _theme = value.first;
                       });
+                      _scheduleSave();
                     },
                   ),
                 ),
@@ -155,22 +168,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 18),
               _SettingsCard(
                 title: 'Storage',
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Primary Library Path'),
-                  subtitle: Text(
-                    settings.libraryPath.isEmpty
-                        ? 'App documents directory'
-                        : settings.libraryPath,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _isSaving ? null : _saveSettings,
-                  child: Text(_isSaving ? 'Saving...' : 'Save Settings'),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Primary Library Path'),
+                      subtitle: Text(
+                        settings.libraryPath.isEmpty
+                            ? 'App documents directory'
+                            : settings.libraryPath,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _isMigratingStorage
+                            ? null
+                            : () => _changeLibraryDirectory(settings),
+                        icon: Icon(
+                          _isMigratingStorage
+                              ? Icons.sync_rounded
+                              : Icons.drive_folder_upload_outlined,
+                        ),
+                        label: Text(
+                          _isMigratingStorage
+                              ? 'Migrating Library...'
+                              : 'Change Directory',
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -183,11 +212,68 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Future<void> _saveSettings() async {
-    setState(() {
-      _isSaving = true;
-    });
+  Future<void> _changeLibraryDirectory(AppSettings settings) async {
+    final String? selectedPath = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Select library folder',
+    );
+    if (selectedPath == null || selectedPath.trim().isEmpty) {
+      return;
+    }
 
+    final SettingsRepository settingsRepository = ref.read(
+      settingsRepositoryProvider,
+    );
+    final fileService = ref.read(fileServiceProvider);
+    final bookRepository = ref.read(bookRepositoryProvider);
+    final String currentLibraryRoot = await fileService.getLibraryRootPath();
+    final String normalizedCurrent = p.normalize(currentLibraryRoot);
+    final String normalizedSelected = p.normalize(selectedPath);
+    if (normalizedCurrent == normalizedSelected) {
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isMigratingStorage = true;
+      });
+    }
+
+    try {
+      await fileService.migrateLibrary(newRootPath: selectedPath);
+      final books = await bookRepository.getAllBooks();
+      for (final book in books) {
+        final String? oldCoverPath = book.coverPath;
+        final String? newCoverPath = oldCoverPath == null
+            ? null
+            : p.join(selectedPath, book.folderName, p.basename(oldCoverPath));
+        await bookRepository.updateCoverPath(
+          id: book.id,
+          coverPath: newCoverPath,
+        );
+      }
+      await settingsRepository.setValue('library_path', selectedPath);
+      ref.invalidate(settingsProvider);
+      ref.invalidate(booksProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Library directory updated.')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isMigratingStorage = false;
+        });
+      }
+    }
+  }
+
+  void _scheduleSave() {
+    _saveDebounce?.cancel();
+    _saveDebounce = Timer(const Duration(milliseconds: 350), _saveSettings);
+  }
+
+  Future<void> _saveSettings() async {
     final SettingsRepository repository = ref.read(settingsRepositoryProvider);
     await repository.setValue('ai_mode', _aiMode.toString());
     await repository.setValue('ai_api_key', _apiKeyController.text.trim());
@@ -195,15 +281,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await repository.setValue('gemma_model', _gemmaController.text.trim());
     await repository.setValue('theme', _theme);
     ref.invalidate(settingsProvider);
-
-    if (mounted) {
-      setState(() {
-        _isSaving = false;
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Settings saved')));
-    }
   }
 }
 

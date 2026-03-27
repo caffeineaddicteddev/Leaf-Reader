@@ -4,6 +4,7 @@ import '../data/repositories/book_repository.dart';
 import '../domain/models/book.dart';
 import '../services/file_service.dart';
 import 'database_provider.dart';
+import 'settings_provider.dart';
 
 final Provider<BookRepository> bookRepositoryProvider =
     Provider<BookRepository>((Ref ref) {
@@ -19,7 +20,10 @@ final StreamProvider<List<Book>> booksProvider = StreamProvider<List<Book>>((
 final Provider<FileService> fileServiceProvider = Provider<FileService>((
   Ref ref,
 ) {
-  return FileService();
+  return FileService(
+    libraryPathProvider: () async =>
+        ref.read(settingsRepositoryProvider).getValue('library_path'),
+  );
 });
 
 final bookProvider = FutureProvider.family<Book?, String>((

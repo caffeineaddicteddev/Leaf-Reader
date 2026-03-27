@@ -7,12 +7,12 @@ import '../file_service.dart';
 
 class ReaderBlock {
   const ReaderBlock({
-    required this.page,
+    required this.pageLabel,
     required this.text,
     required this.aiCorrected,
   });
 
-  final int page;
+  final String pageLabel;
   final String text;
   final bool aiCorrected;
 }
@@ -43,7 +43,7 @@ class ReaderContentService {
       return ocrPages
           .map(
             (OcrPage page) => ReaderBlock(
-              page: page.page,
+              pageLabel: 'Page ${page.page}',
               text: page.text,
               aiCorrected: false,
             ),
@@ -54,22 +54,41 @@ class ReaderContentService {
     final List<CleanPage> cleanPages = await _cleanJsonManager.readPages(
       cleanPath,
     );
-    final Map<int, CleanPage> cleanByPage = <int, CleanPage>{};
+    final Set<int> coveredPages = <int>{};
+    final List<ReaderBlock> blocks = <ReaderBlock>[];
+
     for (final CleanPage cleanPage in cleanPages) {
-      cleanByPage[cleanPage.page] = cleanPage;
+      if (cleanPage.text.trim().isEmpty || cleanPage.sourcePages.isEmpty) {
+        continue;
+      }
+      coveredPages.addAll(cleanPage.sourcePages);
+      final List<int> sourcePages = List<int>.from(cleanPage.sourcePages)
+        ..sort();
+      final String pageLabel = sourcePages.length == 1
+          ? 'Page ${sourcePages.first}'
+          : 'Pages ${sourcePages.first}-${sourcePages.last}';
+      blocks.add(
+        ReaderBlock(
+          pageLabel: pageLabel,
+          text: cleanPage.text,
+          aiCorrected: true,
+        ),
+      );
     }
 
-    return ocrPages
-        .map((OcrPage ocrPage) {
-          final CleanPage? cleanPage = cleanByPage[ocrPage.page];
-          return ReaderBlock(
-            page: ocrPage.page,
-            text: cleanPage?.text.isNotEmpty == true
-                ? cleanPage!.text
-                : ocrPage.text,
-            aiCorrected: cleanPage?.text.isNotEmpty == true,
-          );
-        })
-        .toList(growable: false);
+    for (final OcrPage ocrPage in ocrPages) {
+      if (coveredPages.contains(ocrPage.page)) {
+        continue;
+      }
+      blocks.add(
+        ReaderBlock(
+          pageLabel: 'Page ${ocrPage.page}',
+          text: ocrPage.text,
+          aiCorrected: false,
+        ),
+      );
+    }
+
+    return blocks;
   }
 }
