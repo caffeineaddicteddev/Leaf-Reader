@@ -66,7 +66,7 @@ You can start reading before the full book finishes processing. The first page a
 > Minimum Android version: Android 8.0 (API 26)
 
 | Channel | Link |
-|---|
+|---|---|
 | **Alpha** | [Download APK](https://github.com/caffeineaddicteddev/Leaf-PDF-Reader/releases) |
 
 **How to install:**
