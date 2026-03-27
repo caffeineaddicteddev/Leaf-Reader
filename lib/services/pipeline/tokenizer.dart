@@ -19,20 +19,32 @@ class TokenizerResult {
   final List<int> sourcePages;
 }
 
+class TokenizerBoundary {
+  const TokenizerBoundary({
+    required this.chunk,
+    required this.nextCursor,
+    required this.sourcePages,
+  });
+
+  final String chunk;
+  final TokenizerCursor nextCursor;
+  final List<int> sourcePages;
+}
+
 class Tokenizer {
   const Tokenizer();
 
   static const List<String> _terminators = <String>[
-    '।',
     '.',
-    '. ',
-    '.\n',
     '?',
-    '? ',
-    '?\n',
     '!',
-    '! ',
-    '!\n',
+    '\u0964',
+    '\u0965',
+    '\u06d4',
+    '\u061f',
+    '\u3002',
+    '\uff01',
+    '\uff1f',
   ];
 
   TokenizerResult? nextChunk({
@@ -56,51 +68,106 @@ class Tokenizer {
 
     final StringBuffer buffer = StringBuffer();
     final List<int> sourcePages = <int>[];
-    final List<int> pageStarts = <int>[];
-    final int startPageIndex = pageIndex;
-    int collected = 0;
-    for (
-      int index = pageIndex;
-      index < pages.length && collected < 3;
-      index += 1
-    ) {
+    for (int index = pageIndex; index < pages.length; index += 1) {
       final String pageText = index == pageIndex
           ? pages[index].text.substring(charOffset)
           : pages[index].text;
       if (pageText.trim().isEmpty) {
         continue;
       }
-      pageStarts.add(buffer.length);
       buffer.write(pageText);
       sourcePages.add(pages[index].page);
-      collected += 1;
+      final int splitIndex = _findSentenceBreak(buffer.toString());
+      if (splitIndex != -1) {
+        final String chunk = buffer.toString().substring(0, splitIndex).trim();
+        return TokenizerResult(
+          chunk: chunk,
+          nextCursor: _advanceCursor(
+            pages: pages,
+            startPageIndex: pageIndex,
+            initialOffset: charOffset,
+            consumedCharacters: splitIndex,
+          ),
+          sourcePages: sourcePages,
+        );
+      }
+    }
+
+    final String combined = buffer.toString().trim();
+    if (combined.isEmpty) {
+      return null;
+    }
+
+    return TokenizerResult(
+      chunk: combined,
+      nextCursor: TokenizerCursor(pageIndex: pages.length, charOffset: 0),
+      sourcePages: sourcePages,
+    );
+  }
+
+  TokenizerBoundary splitAtLastSentenceBoundary({
+    required List<OcrPage> pages,
+    TokenizerCursor cursor = const TokenizerCursor(pageIndex: 0, charOffset: 0),
+  }) {
+    int pageIndex = cursor.pageIndex;
+    int charOffset = cursor.charOffset;
+    while (pageIndex < pages.length) {
+      final String pageText = pages[pageIndex].text;
+      if (charOffset >= pageText.length || pageText.trim().isEmpty) {
+        pageIndex += 1;
+        charOffset = 0;
+        continue;
+      }
+      break;
+    }
+
+    if (pageIndex >= pages.length) {
+      return TokenizerBoundary(
+        chunk: '',
+        nextCursor: TokenizerCursor(pageIndex: pages.length, charOffset: 0),
+        sourcePages: const <int>[],
+      );
+    }
+
+    final StringBuffer buffer = StringBuffer();
+    final List<int> sourcePages = <int>[];
+    for (int index = pageIndex; index < pages.length; index += 1) {
+      final String pageText = index == pageIndex
+          ? pages[index].text.substring(charOffset)
+          : pages[index].text;
+      if (pageText.trim().isEmpty) {
+        continue;
+      }
+      buffer.write(pageText);
+      sourcePages.add(pages[index].page);
     }
 
     final String combined = buffer.toString();
     if (combined.trim().isEmpty) {
-      return null;
+      return TokenizerBoundary(
+        chunk: '',
+        nextCursor: TokenizerCursor(pageIndex: pages.length, charOffset: 0),
+        sourcePages: const <int>[],
+      );
     }
 
-    int splitIndex = _findSentenceBreak(combined);
-    if (splitIndex == -1 &&
-        startPageIndex + sourcePages.length < pages.length) {
-      splitIndex = _findWhitespaceBreak(combined);
-    }
+    final int splitIndex = _findSentenceBreak(combined);
     if (splitIndex == -1) {
-      splitIndex = combined.length;
+      return TokenizerBoundary(
+        chunk: combined.trim(),
+        nextCursor: TokenizerCursor(pageIndex: pages.length, charOffset: 0),
+        sourcePages: sourcePages,
+      );
     }
 
-    final String chunk = combined.substring(0, splitIndex).trim();
-    final TokenizerCursor nextCursor = _advanceCursor(
-      pages: pages,
-      startPageIndex: startPageIndex,
-      initialOffset: charOffset,
-      consumedCharacters: splitIndex,
-    );
-
-    return TokenizerResult(
-      chunk: chunk,
-      nextCursor: nextCursor,
+    return TokenizerBoundary(
+      chunk: combined.substring(0, splitIndex).trim(),
+      nextCursor: _advanceCursor(
+        pages: pages,
+        startPageIndex: pageIndex,
+        initialOffset: charOffset,
+        consumedCharacters: splitIndex,
+      ),
       sourcePages: sourcePages,
     );
   }
@@ -117,14 +184,6 @@ class Tokenizer {
       }
     }
     return bestIndex;
-  }
-
-  int _findWhitespaceBreak(String combined) {
-    final int whitespace = combined.lastIndexOf(RegExp(r'\s'));
-    if (whitespace == -1) {
-      return -1;
-    }
-    return whitespace + 1;
   }
 
   TokenizerCursor _advanceCursor({

@@ -90,6 +90,13 @@ class FileService {
     );
   }
 
+  Future<String> getProcessingStatePath(String folderName) async {
+    return p.join(
+      await getBookFolderPath(folderName),
+      AppConstants.processingStateFileName,
+    );
+  }
+
   Future<String> getPdfPath(Book book) async {
     return p.join(await getBookFolderPath(book.folderName), book.pdfFilename);
   }

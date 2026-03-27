@@ -7,11 +7,9 @@ import 'package:go_router/go_router.dart';
 import '../../../domain/models/book.dart';
 import '../../../domain/models/processing_status.dart';
 import '../../../providers/book_providers.dart';
+import '../../../providers/pipeline_provider.dart';
 import '../../../providers/reader_provider.dart';
-import '../../../providers/settings_provider.dart';
 import '../../router.dart';
-
-enum _ReaderMenuAction { toggleAi }
 
 class ReaderScreen extends ConsumerStatefulWidget {
   const ReaderScreen({required this.bookId, super.key});
@@ -23,18 +21,21 @@ class ReaderScreen extends ConsumerStatefulWidget {
 }
 
 class _ReaderScreenState extends ConsumerState<ReaderScreen> {
-  bool _initializedToggle = false;
   Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(pipelineProvider(widget.bookId).notifier).continueFromReader();
+    });
     _refreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (!mounted) {
         return;
       }
       ref.invalidate(bookProvider(widget.bookId));
       ref.invalidate(readerBlocksProvider(widget.bookId));
+      ref.read(pipelineProvider(widget.bookId).notifier).continueFromReader();
     });
   }
 
@@ -47,22 +48,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   @override
   Widget build(BuildContext context) {
     final bookAsync = ref.watch(bookProvider(widget.bookId));
-    final settingsAsync = ref.watch(settingsProvider);
-    final aiRunState = ref.watch(readerAiControllerProvider(widget.bookId));
-
-    settingsAsync.whenData((AppSettings settings) {
-      if (!_initializedToggle) {
-        ref.read(readerAiToggleProvider(widget.bookId).notifier).state =
-            settings.aiMode;
-        _initializedToggle = true;
-      }
-    });
-
-    final bool aiEnabled = ref.watch(readerAiToggleProvider(widget.bookId));
     final blocksAsync = ref.watch(readerBlocksProvider(widget.bookId));
-    final book = bookAsync.valueOrNull;
-    final String subtitle = _subtitleForBook(book, aiEnabled);
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (bool didPop, Object? result) {
@@ -82,7 +68,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                book?.name ?? 'Reader',
+                bookAsync.valueOrNull?.name ?? 'Reader',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(
@@ -91,7 +77,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               ),
               const SizedBox(height: 2),
               Text(
-                subtitle,
+                _subtitleForBook(bookAsync.valueOrNull),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -102,39 +88,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               ),
             ],
           ),
-          actions: <Widget>[
-            PopupMenuButton<_ReaderMenuAction>(
-              onSelected: (_ReaderMenuAction action) async {
-                switch (action) {
-                  case _ReaderMenuAction.toggleAi:
-                    final bool newValue = !aiEnabled;
-                    ref
-                            .read(
-                              readerAiToggleProvider(widget.bookId).notifier,
-                            )
-                            .state =
-                        newValue;
-                    if (newValue) {
-                      await ref
-                          .read(
-                            readerAiControllerProvider(widget.bookId).notifier,
-                          )
-                          .enableAi(widget.bookId);
-                    }
-                    ref.invalidate(readerBlocksProvider(widget.bookId));
-                }
-              },
-              itemBuilder: (BuildContext context) =>
-                  <PopupMenuEntry<_ReaderMenuAction>>[
-                    CheckedPopupMenuItem<_ReaderMenuAction>(
-                      value: _ReaderMenuAction.toggleAi,
-                      checked: aiEnabled,
-                      child: const Text('AI cleanup'),
-                    ),
-                  ],
-              icon: const Icon(Icons.more_vert),
-            ),
-            const SizedBox(width: 4),
+          actions: const <Widget>[
+            SizedBox(width: 8),
+            Icon(Icons.more_vert),
+            SizedBox(width: 12),
           ],
         ),
         body: Container(
@@ -154,16 +111,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   22,
                   safePadding.bottom + 28,
                 ),
-                itemCount: blocks.length + (aiRunState.isLoading ? 1 : 0),
-                separatorBuilder: (context, index) =>
+                itemCount: blocks.length,
+                separatorBuilder: (BuildContext context, int index) =>
                     const SizedBox(height: 28),
                 itemBuilder: (BuildContext context, int index) {
-                  if (aiRunState.isLoading && index == blocks.length) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
                   final block = blocks[index];
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -200,18 +151,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
-  String _subtitleForBook(Book? book, bool aiEnabled) {
+  String _subtitleForBook(Book? book) {
     if (book == null) {
       return 'OCR EXTRACTED';
     }
     if (book.status == BookProcessingState.processing) {
-      final String progress = book.totalPages == 0
-          ? 'processing'
-          : '${book.aiProgress > 0 ? book.aiProgress : book.ocrProgress}/${book.totalPages} pages';
-      return aiEnabled
-          ? 'AI CLEAN-UP ON  •  $progress'
-          : 'OCR EXTRACTED  •  $progress';
+      final int completedPages = book.aiProgress > 0
+          ? book.aiProgress
+          : book.ocrProgress;
+      return '$completedPages/${book.totalPages} pages';
     }
-    return aiEnabled ? 'AI CLEAN-UP ON' : 'OCR EXTRACTED';
+    return 'OCR EXTRACTED';
   }
 }

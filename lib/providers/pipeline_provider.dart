@@ -6,11 +6,13 @@ import '../core/constants.dart';
 import '../core/errors.dart';
 import '../data/json/clean_json_manager.dart';
 import '../data/json/ocr_json_manager.dart';
+import '../data/json/processing_state_manager.dart';
 import '../data/repositories/book_repository.dart';
 import '../domain/language_registry.dart';
 import '../domain/models/book.dart';
 import '../domain/models/ocr_language.dart';
 import '../domain/models/ocr_page.dart';
+import '../domain/models/processing_continuation_state.dart';
 import '../domain/models/processing_status.dart';
 import '../services/file_service.dart';
 import '../services/platform/leaf_platform_channel.dart';
@@ -29,6 +31,7 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
       _platformChannel = LeafPlatformChannel(),
       _ocrJsonManager = OcrJsonManager(),
       _cleanJsonManager = CleanJsonManager(),
+      _processingStateManager = ProcessingStateManager(),
       _readerAiService = ReaderAiService(),
       super(ProcessingStatus.idle());
 
@@ -39,6 +42,7 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
   final LeafPlatformChannel _platformChannel;
   final OcrJsonManager _ocrJsonManager;
   final CleanJsonManager _cleanJsonManager;
+  final ProcessingStateManager _processingStateManager;
   final ReaderAiService _readerAiService;
 
   bool _cancelRequested = false;
@@ -59,7 +63,29 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
       aiCompletedPages: 0,
       readerReady: false,
     );
-    _activeTask = _runPipeline();
+    _activeTask = _runBootstrap();
+    return _activeTask;
+  }
+
+  Future<void> continueFromReader() async {
+    if (_activeTask != null) {
+      return _activeTask;
+    }
+    final Book? book = await _bookRepository.getBook(_bookId);
+    if (book == null) {
+      return;
+    }
+    final String statePath = await _fileService.getProcessingStatePath(
+      book.folderName,
+    );
+    final ProcessingContinuationState persisted = await _processingStateManager
+        .read(statePath);
+    if (!persisted.bootstrapComplete || persisted.continuationMode == 'none') {
+      return;
+    }
+    _cancelRequested = false;
+    _cancelMode = _CancelMode.none;
+    _activeTask = _runContinuation();
     return _activeTask;
   }
 
@@ -69,7 +95,12 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
       return PipelineCancelResult.none;
     }
     _cancelRequested = true;
-    _cancelMode = state.readerReady || state.aiCompletedPages > 0
+    final int bootstrapThreshold = state.totalPages < 10
+        ? state.totalPages
+        : 10;
+    _cancelMode =
+        state.phase == ProcessingPhase.aiCleanup ||
+            state.ocrCompletedPages >= bootstrapThreshold
         ? _CancelMode.keepOcr
         : _CancelMode.deleteBook;
     await _activeTask;
@@ -96,28 +127,47 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
     state = ProcessingStatus.idle();
   }
 
-  Future<void> _runPipeline() async {
+  Future<void> _runBootstrap() async {
     try {
       final Book? book = await _bookRepository.getBook(_bookId);
       if (book == null) {
         throw const PipelineException('Book not found.');
       }
-
+      final AppSettings settings = await _ref.read(settingsProvider.future);
       final OcrLanguage language = LanguageRegistry.byCode(book.languageCode);
       final String pdfPath = await _fileService.getPdfPath(book);
       final String ocrPath = await _fileService.getOcrJsonPath(book.folderName);
       final String cleanPath = await _fileService.getCleanJsonPath(
         book.folderName,
       );
+      final String statePath = await _fileService.getProcessingStatePath(
+        book.folderName,
+      );
       final int totalPages = book.totalPages > 0
           ? book.totalPages
           : await _fileService.getPageCount(pdfPath);
-      final int firstAiBatchEnd = totalPages < 10 ? totalPages : 10;
+      final int bootstrapEnd = totalPages < 10 ? totalPages : 10;
+      final bool aiEnabled =
+          settings.aiMode && settings.aiApiKey.trim().isNotEmpty;
 
       await _ocrJsonManager.clear(ocrPath);
       await _ocrJsonManager.initialize(filePath: ocrPath, bookId: book.id);
       await _cleanJsonManager.clear(cleanPath);
       await _cleanJsonManager.initialize(filePath: cleanPath, bookId: book.id);
+      await _processingStateManager.clear(statePath);
+      await _processingStateManager.initialize(
+        filePath: statePath,
+        bookId: book.id,
+      );
+      await _processingStateManager.write(
+        filePath: statePath,
+        state: ProcessingContinuationState.initial(book.id).copyWith(
+          continuationMode: aiEnabled ? 'staged_ai' : 'ocr_only',
+          nextOcrPage: 1,
+          nextAiPage: 1,
+          nextAiCharOffset: 0,
+        ),
+      );
       await _bookRepository.updateProgress(
         id: book.id,
         ocrProgress: 0,
@@ -125,8 +175,8 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
         status: BookProcessingState.processing.name,
       );
 
-      await _prepareLanguage(language, totalPages);
-      if (await _handleCancellation(book, cleanPath)) {
+      await _prepareLanguage(language, totalPages, statePath);
+      if (await _handleCancellation(book, statePath)) {
         return;
       }
 
@@ -136,94 +186,67 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
         ocrPath: ocrPath,
         language: language,
         totalPages: totalPages,
+        statePath: statePath,
         startPage: 1,
-        endPage: firstAiBatchEnd,
+        endPage: bootstrapEnd,
       );
-      if (await _handleCancellation(book, cleanPath)) {
+      if (await _handleCancellation(book, statePath)) {
         return;
       }
 
-      final settings = await _ref.read(settingsProvider.future);
-      if (settings.aiMode && settings.aiApiKey.trim().isNotEmpty) {
-        await _runCleanupBatch(
+      await _processingStateManager.update(
+        filePath: statePath,
+        transform: (ProcessingContinuationState current) =>
+            current.copyWith(nextOcrPage: bootstrapEnd + 1),
+      );
+
+      if (aiEnabled) {
+        await _runBootstrapGeminiCleanup(
           book: book,
           totalPages: totalPages,
-          startPage: 1,
-          endPage: firstAiBatchEnd,
+          statePath: statePath,
           settings: settings,
-          readerReadyAfterBatch: true,
         );
-        if (await _handleCancellation(book, cleanPath)) {
+        if (await _handleCancellation(book, statePath)) {
           return;
         }
-      } else {
-        state = ProcessingStatus(
-          phase: ProcessingPhase.done,
-          currentPage: firstAiBatchEnd,
-          totalPages: totalPages,
-          ocrCompletedPages: firstAiBatchEnd,
-          aiCompletedPages: 0,
+      }
+
+      final bool hasContinuation = bootstrapEnd < totalPages;
+      final String continuationMode = aiEnabled ? 'staged_ai' : 'ocr_only';
+      await _processingStateManager.update(
+        filePath: statePath,
+        transform: (ProcessingContinuationState current) => current.copyWith(
+          bootstrapComplete: true,
           readerReady: true,
-        );
-      }
-
-      if (firstAiBatchEnd < totalPages) {
-        await _runOcr(
-          bookId: book.id,
-          pdfPath: pdfPath,
-          ocrPath: ocrPath,
-          language: language,
-          totalPages: totalPages,
-          startPage: firstAiBatchEnd + 1,
-          endPage: totalPages,
-        );
-        if (await _handleCancellation(book, cleanPath)) {
-          return;
-        }
-
-        if (settings.aiMode && settings.aiApiKey.trim().isNotEmpty) {
-          await _runCleanupBatch(
-            book: book,
-            totalPages: totalPages,
-            startPage: firstAiBatchEnd + 1,
-            endPage: totalPages,
-            settings: settings,
-            readerReadyAfterBatch: true,
-          );
-          if (await _handleCancellation(book, cleanPath)) {
-            return;
-          }
-        }
-      }
-
-      final int finalAiProgress =
-          settings.aiMode && settings.aiApiKey.trim().isNotEmpty
-          ? totalPages
-          : 0;
-      await _bookRepository.updateProgress(
-        id: book.id,
-        ocrProgress: totalPages,
-        aiProgress: finalAiProgress,
-        status: BookProcessingState.ready.name,
+          continuationMode: hasContinuation ? continuationMode : 'none',
+          nextOcrPage: bootstrapEnd + 1,
+          nextAiPage: aiEnabled ? current.nextAiPage : 1,
+          nextAiCharOffset: aiEnabled ? current.nextAiCharOffset : 0,
+          firstGeminiBatchComplete: aiEnabled,
+          nativeOcrActive: false,
+        ),
       );
+
+      if (!hasContinuation) {
+        await _bookRepository.updateProgress(
+          id: book.id,
+          ocrProgress: totalPages,
+          aiProgress: aiEnabled ? totalPages : 0,
+          status: BookProcessingState.ready.name,
+        );
+      }
+
       state = ProcessingStatus(
         phase: ProcessingPhase.done,
-        currentPage: totalPages,
+        currentPage: bootstrapEnd,
         totalPages: totalPages,
-        ocrCompletedPages: totalPages,
-        aiCompletedPages: finalAiProgress,
+        ocrCompletedPages: bootstrapEnd,
+        aiCompletedPages: aiEnabled ? bootstrapEnd : 0,
         readerReady: true,
       );
     } catch (error) {
-      final Book? book = await _bookRepository.getBook(_bookId);
-      if (book != null) {
-        await _bookRepository.updateProgress(
-          id: _bookId,
-          ocrProgress: book.ocrProgress,
-          aiProgress: book.aiProgress,
-          status: BookProcessingState.error.name,
-        );
-      }
+      await _markBookError();
       state = ProcessingStatus(
         phase: ProcessingPhase.error,
         currentPage: 0,
@@ -239,92 +262,254 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
     }
   }
 
-  Future<void> _runCleanupBatch({
+  Future<void> _runContinuation() async {
+    try {
+      final Book? book = await _bookRepository.getBook(_bookId);
+      if (book == null) {
+        throw const PipelineException('Book not found.');
+      }
+      final String pdfPath = await _fileService.getPdfPath(book);
+      final String statePath = await _fileService.getProcessingStatePath(
+        book.folderName,
+      );
+      ProcessingContinuationState continuation = await _processingStateManager
+          .read(statePath);
+      final int totalPages = book.totalPages;
+      if (!continuation.bootstrapComplete ||
+          continuation.continuationMode == 'none') {
+        return;
+      }
+
+      final OcrLanguage language = LanguageRegistry.byCode(book.languageCode);
+      if (continuation.nextOcrPage <= totalPages) {
+        await _prepareLanguage(language, totalPages, statePath);
+        await _runOcr(
+          bookId: book.id,
+          pdfPath: pdfPath,
+          ocrPath: await _fileService.getOcrJsonPath(book.folderName),
+          language: language,
+          totalPages: totalPages,
+          statePath: statePath,
+          startPage: continuation.nextOcrPage,
+          endPage: totalPages,
+        );
+        if (await _handleCancellation(book, statePath)) {
+          return;
+        }
+        await _processingStateManager.update(
+          filePath: statePath,
+          transform: (ProcessingContinuationState current) => current.copyWith(
+            nextOcrPage: totalPages + 1,
+            nativeOcrActive: false,
+          ),
+        );
+      }
+
+      continuation = await _processingStateManager.read(statePath);
+      if (continuation.continuationMode == 'staged_ai') {
+        final AppSettings settings = await _ref.read(settingsProvider.future);
+        if (!continuation.firstGeminiBatchComplete) {
+          await _runBootstrapGeminiCleanup(
+            book: book,
+            totalPages: totalPages,
+            statePath: statePath,
+            settings: settings,
+          );
+          if (await _handleCancellation(book, statePath)) {
+            return;
+          }
+        }
+
+        continuation = await _processingStateManager.read(statePath);
+        final int gemmaStartPage = continuation.nextAiPage < 10
+            ? 10
+            : continuation.nextAiPage;
+        final int gemmaStartCharOffset = continuation.nextAiPage <= 10
+            ? continuation.nextAiCharOffset
+            : 0;
+        if (gemmaStartPage <= totalPages) {
+          final int nextAiPage = await _runGemmaContinuation(
+            book: book,
+            totalPages: totalPages,
+            statePath: statePath,
+            startPage: gemmaStartPage,
+            startCharOffset: gemmaStartCharOffset,
+            settings: settings,
+          );
+          await _processingStateManager.update(
+            filePath: statePath,
+            transform: (ProcessingContinuationState current) =>
+                current.copyWith(nextAiPage: nextAiPage, nextAiCharOffset: 0),
+          );
+          if (await _handleCancellation(book, statePath)) {
+            return;
+          }
+        }
+      }
+
+      await _processingStateManager.update(
+        filePath: statePath,
+        transform: (ProcessingContinuationState current) => current.copyWith(
+          continuationMode: 'none',
+          nextAiCharOffset: 0,
+          nativeOcrActive: false,
+        ),
+      );
+      await _bookRepository.updateProgress(
+        id: book.id,
+        ocrProgress: totalPages,
+        aiProgress: continuation.continuationMode == 'staged_ai'
+            ? totalPages
+            : 0,
+        status: BookProcessingState.ready.name,
+      );
+      state = ProcessingStatus(
+        phase: ProcessingPhase.done,
+        currentPage: totalPages,
+        totalPages: totalPages,
+        ocrCompletedPages: totalPages,
+        aiCompletedPages: continuation.continuationMode == 'staged_ai'
+            ? totalPages
+            : 0,
+        readerReady: true,
+      );
+    } catch (error) {
+      await _markBookError();
+      state = ProcessingStatus(
+        phase: ProcessingPhase.error,
+        currentPage: 0,
+        totalPages: state.totalPages,
+        ocrCompletedPages: state.ocrCompletedPages,
+        aiCompletedPages: state.aiCompletedPages,
+        readerReady: true,
+        errorMessage: error.toString(),
+      );
+    } finally {
+      await _platformChannel.destroyTesseract();
+      _activeTask = null;
+    }
+  }
+
+  Future<void> _runBootstrapGeminiCleanup({
     required Book book,
     required int totalPages,
-    required int startPage,
-    required int endPage,
+    required String statePath,
     required AppSettings settings,
-    required bool readerReadyAfterBatch,
   }) async {
     state = ProcessingStatus(
       phase: ProcessingPhase.aiCleanup,
-      currentPage: startPage,
+      currentPage: totalPages < 10 ? totalPages : 10,
       totalPages: totalPages,
       ocrCompletedPages: state.ocrCompletedPages,
       aiCompletedPages: state.aiCompletedPages,
       readerReady: state.readerReady,
     );
-    await _readerAiService.runCleanup(
+    final bootstrapCursor = await _readerAiService.runBootstrapGeminiCleanup(
       book: book,
       apiKey: settings.aiApiKey,
       geminiModel: settings.geminiModel,
-      gemmaModel: settings.gemmaModel,
-      startPage: startPage,
-      endPage: endPage,
       shouldCancel: () => _cancelRequested,
-      onProgress: (int currentPage, int totalBatchPages) async {
-        if (_cancelRequested) {
-          return;
-        }
-        final int completedInsideBatch = (currentPage - startPage) + 1;
-        final int aiCompletedPages = (startPage - 1) + completedInsideBatch;
+      onProgress: (int currentPage, int _) async {
         state = ProcessingStatus(
           phase: ProcessingPhase.aiCleanup,
           currentPage: currentPage,
           totalPages: totalPages,
           ocrCompletedPages: state.ocrCompletedPages,
-          aiCompletedPages: aiCompletedPages,
-          readerReady:
-              readerReadyAfterBatch &&
-              aiCompletedPages >= (endPage < 10 ? endPage : 10),
+          aiCompletedPages: currentPage,
+          readerReady: state.readerReady,
         );
         await _bookRepository.updateProgress(
           id: book.id,
           ocrProgress: state.ocrCompletedPages,
-          aiProgress: aiCompletedPages,
+          aiProgress: currentPage,
           status: BookProcessingState.processing.name,
         );
       },
     );
-
-    final int completedBatchPages = endPage;
-    state = ProcessingStatus(
-      phase: ProcessingPhase.done,
-      currentPage: completedBatchPages,
-      totalPages: totalPages,
-      ocrCompletedPages: state.ocrCompletedPages,
-      aiCompletedPages: completedBatchPages,
-      readerReady: readerReadyAfterBatch,
-    );
-    await _bookRepository.updateProgress(
-      id: book.id,
-      ocrProgress: state.ocrCompletedPages,
-      aiProgress: completedBatchPages,
-      status: completedBatchPages >= totalPages
-          ? BookProcessingState.ready.name
-          : BookProcessingState.processing.name,
+    await _processingStateManager.update(
+      filePath: statePath,
+      transform: (ProcessingContinuationState current) => current.copyWith(
+        firstGeminiBatchComplete: true,
+        nextAiPage: bootstrapCursor.pageIndex >= 10 ? 11 : 10,
+        nextAiCharOffset: bootstrapCursor.pageIndex >= 10
+            ? 0
+            : bootstrapCursor.charOffset,
+      ),
     );
   }
 
-  Future<bool> _handleCancellation(Book book, String cleanPath) async {
+  Future<int> _runGemmaContinuation({
+    required Book book,
+    required int totalPages,
+    required String statePath,
+    required int startPage,
+    required int startCharOffset,
+    required AppSettings settings,
+  }) async {
+    final int nextAiPage = await _readerAiService.runGemmaContinuation(
+      book: book,
+      apiKey: settings.aiApiKey,
+      gemmaModel: settings.gemmaModel,
+      startPage: startPage,
+      startCharOffset: startCharOffset,
+      totalPages: totalPages,
+      shouldCancel: () => _cancelRequested,
+      onProgress: (int currentPage, int _) async {
+        state = ProcessingStatus(
+          phase: ProcessingPhase.aiCleanup,
+          currentPage: currentPage,
+          totalPages: totalPages,
+          ocrCompletedPages: totalPages,
+          aiCompletedPages: currentPage,
+          readerReady: true,
+        );
+        await _bookRepository.updateProgress(
+          id: book.id,
+          ocrProgress: totalPages,
+          aiProgress: currentPage,
+          status: BookProcessingState.processing.name,
+        );
+        await _processingStateManager.update(
+          filePath: statePath,
+          transform: (ProcessingContinuationState current) =>
+              current.copyWith(nextAiPage: currentPage, nextAiCharOffset: 0),
+        );
+      },
+    );
+    return nextAiPage;
+  }
+
+  Future<bool> _handleCancellation(Book book, String statePath) async {
     if (!_cancelRequested) {
       return false;
     }
+    final ProcessingContinuationState current = await _processingStateManager
+        .read(statePath);
     switch (_cancelMode) {
       case _CancelMode.deleteBook:
         await _deleteBookAssets(book);
       case _CancelMode.keepOcr:
-        await _cleanJsonManager.clear(cleanPath);
-        await _cleanJsonManager.initialize(
-          filePath: cleanPath,
-          bookId: book.id,
+        await _processingStateManager.write(
+          filePath: statePath,
+          state: current.copyWith(
+            bootstrapComplete: true,
+            readerReady: true,
+            continuationMode: current.continuationMode == 'none'
+                ? 'staged_ai'
+                : current.continuationMode,
+            nextOcrPage: state.ocrCompletedPages + 1,
+            nextAiPage: current.firstGeminiBatchComplete
+                ? current.nextAiPage
+                : 1,
+            nextAiCharOffset: current.nextAiCharOffset,
+            nativeOcrActive: false,
+          ),
         );
         await _bookRepository.updateProgress(
           id: book.id,
           ocrProgress: state.ocrCompletedPages,
-          aiProgress: 0,
-          status: BookProcessingState.ready.name,
+          aiProgress: state.aiCompletedPages,
+          status: BookProcessingState.processing.name,
         );
       case _CancelMode.none:
         break;
@@ -341,7 +526,11 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
     await _fileService.deleteBookFolder(folderPath);
   }
 
-  Future<void> _prepareLanguage(OcrLanguage language, int totalPages) async {
+  Future<void> _prepareLanguage(
+    OcrLanguage language,
+    int totalPages,
+    String statePath,
+  ) async {
     if (_cancelRequested) {
       return;
     }
@@ -371,6 +560,11 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
         );
       }
       await _platformChannel.initTesseract();
+      await _processingStateManager.update(
+        filePath: statePath,
+        transform: (ProcessingContinuationState current) =>
+            current.copyWith(nativeOcrActive: true),
+      );
       return;
     }
 
@@ -402,6 +596,7 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
     required String ocrPath,
     required OcrLanguage language,
     required int totalPages,
+    required String statePath,
     required int startPage,
     required int endPage,
   }) async {
@@ -409,7 +604,6 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
       if (_cancelRequested) {
         return;
       }
-
       state = ProcessingStatus(
         phase: ProcessingPhase.ocr,
         currentPage: pageNum,
@@ -418,7 +612,6 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
         aiCompletedPages: state.aiCompletedPages,
         readerReady: state.readerReady,
       );
-
       final String imagePath = await _platformChannel.renderPage(
         pdfPath: pdfPath,
         pageNum: pageNum,
@@ -434,11 +627,9 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
           script: language.mlkitScript!,
         ),
       };
-
       if (_cancelRequested) {
         return;
       }
-
       await _ocrJsonManager.appendPage(
         filePath: ocrPath,
         page: OcrPage(
@@ -460,6 +651,23 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
         ocrProgress: pageNum,
         aiProgress: state.aiCompletedPages,
         status: BookProcessingState.processing.name,
+      );
+      await _processingStateManager.update(
+        filePath: statePath,
+        transform: (ProcessingContinuationState current) =>
+            current.copyWith(nextOcrPage: pageNum + 1),
+      );
+    }
+  }
+
+  Future<void> _markBookError() async {
+    final Book? book = await _bookRepository.getBook(_bookId);
+    if (book != null) {
+      await _bookRepository.updateProgress(
+        id: _bookId,
+        ocrProgress: book.ocrProgress,
+        aiProgress: book.aiProgress,
+        status: BookProcessingState.error.name,
       );
     }
   }
