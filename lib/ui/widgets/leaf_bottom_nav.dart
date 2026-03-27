@@ -10,49 +10,34 @@ class LeafBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: <BoxShadow>[
-              BoxShadow(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary.withValues(alpha: 0.08),
-                blurRadius: 18,
-                offset: const Offset(0, 10),
-              ),
-            ],
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      child: NavigationBar(
+        selectedIndex: index,
+        height: 76,
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        indicatorColor: const Color(0xFFDCE6F6),
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        onDestinationSelected: (int value) {
+          if (value == 0) {
+            context.go(AppRoutes.library);
+          } else {
+            context.go(AppRoutes.settings);
+          }
+        },
+        destinations: const <Widget>[
+          NavigationDestination(
+            icon: Icon(Icons.description_outlined),
+            selectedIcon: Icon(Icons.description_rounded),
+            label: 'Library',
           ),
-          child: NavigationBar(
-            selectedIndex: index,
-            backgroundColor: Colors.transparent,
-            indicatorColor: const Color(0xFFDCE6F6),
-            onDestinationSelected: (int value) {
-              if (value == 0) {
-                context.go(AppRoutes.library);
-              } else {
-                context.go(AppRoutes.settings);
-              }
-            },
-            destinations: const <Widget>[
-              NavigationDestination(
-                icon: Icon(Icons.description_outlined),
-                selectedIcon: Icon(Icons.description_rounded),
-                label: 'Library',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.settings_outlined),
-                selectedIcon: Icon(Icons.settings),
-                label: 'Settings',
-              ),
-            ],
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Settings',
           ),
-        ),
+        ],
       ),
     );
   }

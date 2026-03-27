@@ -35,6 +35,7 @@ class AppDatabase extends _$AppDatabase {
             value: 'gemini-2.5-flash',
           ),
           SettingsCompanion.insert(key: 'gemma_model', value: 'gemma-3-27b-it'),
+          SettingsCompanion.insert(key: 'ai_mode', value: 'true'),
           SettingsCompanion.insert(key: 'vision_api_key', value: ''),
           SettingsCompanion.insert(key: 'theme', value: 'light'),
           SettingsCompanion.insert(key: 'library_path', value: ''),

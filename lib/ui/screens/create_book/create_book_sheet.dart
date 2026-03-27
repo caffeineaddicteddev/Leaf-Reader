@@ -9,6 +9,8 @@ import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import '../../../data/database/app_database.dart';
+import '../../../data/json/clean_json_manager.dart';
+import '../../../data/json/ocr_json_manager.dart';
 import '../../../providers/book_providers.dart';
 import '../../../providers/pipeline_provider.dart';
 import '../../router.dart';
@@ -149,6 +151,15 @@ class _CreateBookSheetState extends ConsumerState<CreateBookSheet> {
           folderPath: folderPath,
         );
       } catch (_) {}
+
+      await OcrJsonManager().initialize(
+        filePath: await fileService.getOcrJsonPath(p.basename(folderPath)),
+        bookId: bookId,
+      );
+      await CleanJsonManager().initialize(
+        filePath: await fileService.getCleanJsonPath(p.basename(folderPath)),
+        bookId: bookId,
+      );
 
       await repository.insertBook(
         BooksCompanion.insert(

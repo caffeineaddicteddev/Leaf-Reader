@@ -33,7 +33,7 @@ class LibraryScreen extends ConsumerWidget {
           return CustomScrollView(
             slivers: <Widget>[
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
                 sliver: SliverToBoxAdapter(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

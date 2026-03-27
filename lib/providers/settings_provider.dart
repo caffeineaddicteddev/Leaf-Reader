@@ -6,6 +6,7 @@ import 'database_provider.dart';
 class AppSettings {
   const AppSettings({
     required this.aiApiKey,
+    required this.aiMode,
     required this.geminiModel,
     required this.gemmaModel,
     required this.theme,
@@ -13,6 +14,7 @@ class AppSettings {
   });
 
   final String aiApiKey;
+  final bool aiMode;
   final String geminiModel;
   final String gemmaModel;
   final String theme;
@@ -29,6 +31,7 @@ settingsProvider = FutureProvider<AppSettings>((Ref ref) async {
   final SettingsRepository repository = ref.watch(settingsRepositoryProvider);
   return AppSettings(
     aiApiKey: await repository.getValue('ai_api_key') ?? '',
+    aiMode: (await repository.getValue('ai_mode') ?? 'true') == 'true',
     geminiModel:
         await repository.getValue('gemini_model') ?? 'gemini-2.5-flash',
     gemmaModel: await repository.getValue('gemma_model') ?? 'gemma-3-27b-it',

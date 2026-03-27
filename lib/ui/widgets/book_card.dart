@@ -23,23 +23,12 @@ class BookCard extends StatelessWidget {
         ? 0.0
         : book.aiProgress / book.totalPages;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(24),
-        onTap: onTap,
-        child: Ink(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: <BoxShadow>[
-              BoxShadow(
-                color: theme.colorScheme.primary.withValues(alpha: 0.08),
-                blurRadius: 18,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: Material(
+        color: theme.colorScheme.surface,
+        child: InkWell(
+          onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(

@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/constants.dart';
 import '../core/extensions.dart';
+import '../domain/models/book.dart';
 import 'platform/leaf_platform_channel.dart';
 
 class FileService {
@@ -65,6 +66,29 @@ class FileService {
 
   Future<int> getPageCount(String pdfPath) {
     return _platformChannel.getPageCount(pdfPath);
+  }
+
+  Future<String> getBookFolderPath(String folderName) async {
+    final Directory root = await _libraryRoot();
+    return p.join(root.path, folderName);
+  }
+
+  Future<String> getOcrJsonPath(String folderName) async {
+    return p.join(
+      await getBookFolderPath(folderName),
+      AppConstants.ocrJsonFileName,
+    );
+  }
+
+  Future<String> getCleanJsonPath(String folderName) async {
+    return p.join(
+      await getBookFolderPath(folderName),
+      AppConstants.cleanJsonFileName,
+    );
+  }
+
+  Future<String> getPdfPath(Book book) async {
+    return p.join(await getBookFolderPath(book.folderName), book.pdfFilename);
   }
 
   Future<int> getLibrarySize() async {
