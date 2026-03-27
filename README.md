@@ -67,7 +67,7 @@ You can start reading before the full book finishes processing. The first page a
 
 | Channel | Link |
 |---|---|
-| **Stable** | [Download APK](https://github.com/caffeineaddicteddev/leaf/releases/latest) |
+| **Alpha** | [Download APK](https://github.com/caffeineaddicteddev/leaf/releases/latest) |
 | **All releases** | [GitHub Releases](https://github.com/caffeineaddicteddev/leaf/releases) |
 
 **How to install:**
