@@ -95,7 +95,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           ],
         ),
         body: Container(
-          color: const Color(0xFFF7F5F0),
+          color: Theme.of(context).scaffoldBackgroundColor,
           child: blocksAsync.when(
             data: (blocks) {
               if (blocks.isEmpty) {

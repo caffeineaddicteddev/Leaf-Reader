@@ -11,8 +11,6 @@ import '../../widgets/book_card.dart';
 import '../../widgets/leaf_bottom_nav.dart';
 import '../create_book/create_book_sheet.dart';
 
-enum _BookCardAction { edit, delete }
-
 class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});
 
@@ -102,9 +100,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                               ? AppRoutes.reader(book.id)
                               : AppRoutes.processing(book.id),
                         ),
-                        onLongPressStart: (LongPressStartDetails details) {
-                          _showBookMenu(context, details.globalPosition, book);
-                        },
+                        onLongPressStart: (_) => _showBookMenu(context, book),
                       );
                     }, childCount: books.length),
                   ),
@@ -119,93 +115,89 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  Future<void> _showBookMenu(
-    BuildContext context,
-    Offset globalPosition,
-    Book book,
-  ) async {
-    final OverlayState overlay = Overlay.of(context);
-    final _BookCardAction? action = await showMenu<_BookCardAction>(
-      context: context,
-      position: RelativeRect.fromRect(
-        Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 1, 1),
-        Offset.zero & overlay.context.size!,
-      ),
-      items: const <PopupMenuEntry<_BookCardAction>>[
-        PopupMenuItem<_BookCardAction>(
-          value: _BookCardAction.edit,
-          child: Text('Edit'),
-        ),
-        PopupMenuItem<_BookCardAction>(
-          value: _BookCardAction.delete,
-          child: Text('Delete'),
-        ),
-      ],
-    );
-
-    switch (action) {
-      case _BookCardAction.edit:
-        await _showEditDialog(book);
-      case _BookCardAction.delete:
-        await _deleteBook(book);
-      case null:
-        break;
-    }
-  }
-
-  Future<void> _showEditDialog(Book book) async {
+  Future<void> _showBookMenu(BuildContext context, Book book) async {
     final TextEditingController nameController = TextEditingController(
       text: book.name,
     );
     final TextEditingController authorController = TextEditingController(
       text: book.author,
     );
-    final bool? shouldSave = await showDialog<bool>(
+    await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Edit Book'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Name'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: authorController,
-                decoration: const InputDecoration(labelText: 'Author'),
-              ),
-            ],
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 16,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
           ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  'Edit Book',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'Name'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: authorController,
+                  decoration: const InputDecoration(labelText: 'Author'),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () async {
+                      final NavigatorState navigator = Navigator.of(context);
+                      await ref
+                          .read(bookRepositoryProvider)
+                          .updateMetadata(
+                            id: book.id,
+                            name: nameController.text.trim().isEmpty
+                                ? book.name
+                                : nameController.text.trim(),
+                            author: authorController.text.trim(),
+                          );
+                      ref.invalidate(booksProvider);
+                      ref.invalidate(bookProvider(book.id));
+                      navigator.pop();
+                    },
+                    child: const Text('Save Changes'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () async {
+                      Navigator.of(context).pop();
+                      await _deleteBook(book);
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                    child: const Text('Delete Book'),
+                  ),
+                ),
+              ],
             ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Save'),
-            ),
-          ],
+          ),
         );
       },
     );
-
-    if (shouldSave == true) {
-      await ref
-          .read(bookRepositoryProvider)
-          .updateMetadata(
-            id: book.id,
-            name: nameController.text.trim().isEmpty
-                ? book.name
-                : nameController.text.trim(),
-            author: authorController.text.trim(),
-          );
-      ref.invalidate(booksProvider);
-      ref.invalidate(bookProvider(book.id));
-    }
     nameController.dispose();
     authorController.dispose();
   }

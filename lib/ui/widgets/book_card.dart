@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../domain/models/book.dart';
@@ -44,49 +46,16 @@ class BookCard extends StatelessWidget {
           color: theme.colorScheme.surface,
           child: InkWell(
             onTap: onTap,
-            onLongPress: onLongPressStart == null ? null : () {},
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Expanded(
-                    child: Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        gradient: const LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: <Color>[
-                            Color(0xFFD8DFEC),
-                            Color(0xFFC9D3E5),
-                            Color(0xFFE8ECF5),
-                          ],
-                        ),
-                      ),
-                      child: Stack(
-                        children: <Widget>[
-                          Center(
-                            child: Icon(
-                              Icons.menu_book_rounded,
-                              size: 42,
-                              color: theme.colorScheme.primary.withValues(
-                                alpha: 0.45,
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: 10,
-                            right: 10,
-                            child: SizedBox(
-                              height: 36,
-                              width: 36,
-                              child: ProgressRing(progress: progress),
-                            ),
-                          ),
-                        ],
-                      ),
+                    child: _BookCover(
+                      coverPath: book.coverPath,
+                      progress: progress,
+                      statusColor: theme.colorScheme.primary,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -132,6 +101,70 @@ class BookCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _BookCover extends StatelessWidget {
+  const _BookCover({
+    required this.coverPath,
+    required this.progress,
+    required this.statusColor,
+  });
+
+  final String? coverPath;
+  final double progress;
+  final Color statusColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final File? coverFile = coverPath == null ? null : File(coverPath!);
+    final bool hasCover = coverFile != null && coverFile.existsSync();
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          if (hasCover)
+            Image.file(coverFile, fit: BoxFit.cover)
+          else
+            DecoratedBox(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: <Color>[
+                    Color(0xFFD8DFEC),
+                    Color(0xFFC9D3E5),
+                    Color(0xFFE8ECF5),
+                  ],
+                ),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.menu_book_rounded,
+                  size: 42,
+                  color: statusColor.withValues(alpha: 0.45),
+                ),
+              ),
+            ),
+          Positioned(
+            top: 10,
+            right: 10,
+            child: SizedBox(
+              height: 36,
+              width: 36,
+              child: ProgressRing(progress: progress),
+            ),
+          ),
+        ],
       ),
     );
   }
