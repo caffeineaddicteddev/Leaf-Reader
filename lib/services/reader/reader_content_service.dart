@@ -57,14 +57,12 @@ class ReaderContentService {
     final List<CleanPage> cleanPages = await _cleanJsonManager.readPages(
       cleanPath,
     );
-    final Set<int> coveredPages = <int>{};
     final List<ReaderBlock> blocks = <ReaderBlock>[];
 
     for (final CleanPage cleanPage in cleanPages) {
       if (cleanPage.text.trim().isEmpty || cleanPage.sourcePages.isEmpty) {
         continue;
       }
-      coveredPages.addAll(cleanPage.sourcePages);
       final List<int> sourcePages = List<int>.from(cleanPage.sourcePages)
         ..sort();
       final String pageLabel = sourcePages.length == 1
@@ -76,20 +74,6 @@ class ReaderContentService {
           text: cleanPage.text,
           aiCorrected: true,
           sourcePages: sourcePages,
-        ),
-      );
-    }
-
-    for (final OcrPage ocrPage in ocrPages) {
-      if (coveredPages.contains(ocrPage.page)) {
-        continue;
-      }
-      blocks.add(
-        ReaderBlock(
-          pageLabel: 'Page ${ocrPage.page}',
-          text: ocrPage.text,
-          aiCorrected: false,
-          sourcePages: <int>[ocrPage.page],
         ),
       );
     }

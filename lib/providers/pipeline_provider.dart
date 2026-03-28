@@ -493,7 +493,7 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
       aiCompletedPages: state.aiCompletedPages,
       readerReady: state.readerReady,
     );
-    final bootstrapCursor = await _readerAiService.runBootstrapGeminiCleanup(
+    final bootstrapBoundary = await _readerAiService.runBootstrapGeminiCleanup(
       book: book,
       apiKey: settings.aiApiKey,
       geminiModel: settings.geminiModel,
@@ -517,14 +517,22 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
     );
     await _processingStateManager.update(
       filePath: statePath,
-      transform: (ProcessingContinuationState current) => current.copyWith(
-        firstGeminiBatchComplete: true,
-        aiPending: totalPages > 10,
-        nextAiPage: bootstrapCursor.pageIndex >= 10 ? 11 : 10,
-        nextAiCharOffset: bootstrapCursor.pageIndex >= 10
-            ? 0
-            : bootstrapCursor.charOffset,
-      ),
+      transform: (ProcessingContinuationState current) {
+        final int nextAiPage =
+            bootstrapBoundary.nextCursor.pageIndex >=
+                    (state.ocrCompletedPages < 10
+                        ? state.ocrCompletedPages
+                        : 10)
+                ? 11
+                : 10;
+        return current.copyWith(
+          firstGeminiBatchComplete: true,
+          aiPending: totalPages > 10,
+          nextAiPage: nextAiPage,
+          nextAiCharOffset:
+              nextAiPage > 10 ? 0 : bootstrapBoundary.nextCursor.charOffset,
+        );
+      },
     );
   }
 

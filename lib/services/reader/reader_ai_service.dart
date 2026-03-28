@@ -36,7 +36,7 @@ class ReaderAiService {
   final Tokenizer _tokenizer;
   final Future<void> Function(Duration duration) _delay;
 
-  Future<TokenizerCursor> runBootstrapGeminiCleanup({
+  Future<TokenizerBoundary> runBootstrapGeminiCleanup({
     required Book book,
     required String apiKey,
     required String geminiModel,
@@ -51,7 +51,11 @@ class ReaderAiService {
       ocrPath,
     )).where((OcrPage page) => page.page <= 10).toList(growable: false);
     if (pages.isEmpty || shouldCancel?.call() == true) {
-      return const TokenizerCursor(pageIndex: 0, charOffset: 0);
+      return const TokenizerBoundary(
+        chunk: '',
+        nextCursor: TokenizerCursor(pageIndex: 0, charOffset: 0),
+        sourcePages: <int>[],
+      );
     }
     await _cleanJsonManager.initialize(filePath: cleanPath, bookId: book.id);
     final TokenizerBoundary boundary = _tokenizer.splitAtLastSentenceBoundary(
@@ -75,19 +79,19 @@ class ReaderAiService {
             ],
           );
     if (shouldCancel?.call() == true) {
-      return boundary.nextCursor;
+      return boundary;
     }
     await _cleanJsonManager.appendPage(
       filePath: cleanPath,
       page: CleanPage(
-        page: pages.last.page,
+        page: pages.first.page,
         text: cleanedText,
         sourcePages: boundary.sourcePages,
         modelUsed: geminiModel,
         processedAt: DateTime.now().toIso8601String(),
       ),
     );
-    return boundary.nextCursor;
+    return boundary;
   }
 
   Future<int> runGemmaContinuation({

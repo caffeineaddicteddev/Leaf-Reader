@@ -45,18 +45,24 @@ final continuationStateProvider =
           .watch(processingStateManagerProvider)
           .read(statePath);
       if (current.bookId.isEmpty) {
+        final bool aiEnabled = book.aiProgress > 0;
+        final bool ocrPending = book.ocrProgress < book.totalPages;
+        final bool aiPending = aiEnabled && book.aiProgress < book.totalPages;
+
         return ProcessingContinuationState.initial(book.id).copyWith(
           bootstrapComplete: true,
           readerReady: true,
-          continuationMode: book.status == BookProcessingState.processing
-              ? 'ocr_only'
-              : 'none',
-          aiEnabledForBook: book.aiProgress > 0,
-          aiCanceledByUser: book.aiProgress == 0,
-          ocrPending: book.status == BookProcessingState.processing,
-          aiPending: book.aiProgress > 0 && book.aiProgress < book.totalPages,
+          continuationMode: aiPending
+              ? 'staged_ai'
+              : (ocrPending ? 'ocr_only' : 'none'),
+          aiEnabledForBook: aiEnabled,
+          aiCanceledByUser: !aiEnabled,
+          ocrPending: ocrPending,
+          aiPending: aiPending,
           nextOcrPage: book.ocrProgress + 1,
           nextAiPage: book.aiProgress > 0 ? book.aiProgress + 1 : 1,
+          firstGeminiBatchComplete: book.aiProgress >= 10 ||
+              (book.aiProgress > 0 && book.totalPages < 10),
         );
       }
       return current;
