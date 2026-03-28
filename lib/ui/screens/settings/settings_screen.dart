@@ -205,7 +205,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 32),
               Center(
                 child: Text(
-                  'v0.1.0-alpha',
+                  'v0.1.1-alpha',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                         letterSpacing: 1.2,

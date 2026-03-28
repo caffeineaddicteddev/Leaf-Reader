@@ -199,7 +199,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   void _onScroll() {
-    if (_isRestoring) {
+    if (_isRestoring || !_didInitialRestore) {
       return;
     }
     _saveDebounce?.cancel();
@@ -219,13 +219,21 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   void _scheduleRestore(Book? book, ReaderViewData view) {
-    if (book == null || view.blocks.isEmpty) {
+    if (book == null || view.blocks.isEmpty || _isRestoring) {
       return;
     }
     final int restorePage = _pendingRestorePage ?? book.lastReadPage;
     if (_didInitialRestore && _pendingRestorePage == null) {
       return;
     }
+
+    final int index = view.blocks.indexWhere(
+      (ReaderBlock block) => block.sourcePages.contains(restorePage),
+    );
+    if (index == -1 && restorePage > 1) {
+      return;
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
@@ -235,6 +243,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   Future<void> _restoreToPage(int page, ReaderViewData view) async {
+    if (_isRestoring) {
+      return;
+    }
     final int index = view.blocks.indexWhere(
       (ReaderBlock block) => block.sourcePages.contains(page),
     );
@@ -287,6 +298,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   Future<void> _persistVisiblePage() async {
+    if (!_didInitialRestore || _isRestoring) {
+      return;
+    }
     final AsyncValue<ReaderViewData> viewAsync = ref.read(
       readerViewProvider(widget.bookId),
     );
