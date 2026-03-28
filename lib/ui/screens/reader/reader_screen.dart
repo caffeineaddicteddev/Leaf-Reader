@@ -115,19 +115,31 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             ),
           ],
         ),
-        body: readerViewAsync.when(
-          data: (ReaderViewData view) {
+        body: Builder(
+          builder: (BuildContext context) {
+            final ReaderViewData? view = readerViewAsync.valueOrNull;
+            if (view == null) {
+              return readerViewAsync.when(
+                data: (_) => const SizedBox.shrink(),
+                error: (Object error, StackTrace stackTrace) =>
+                    Center(child: Text('$error')),
+                loading: () => const Center(child: CircularProgressIndicator()),
+              );
+            }
+
             final Book? book = bookAsync.valueOrNull;
             _syncKeys(view.blocks.length);
             _scheduleRestore(book, view);
+
             if (view.blocks.isEmpty && view.showLoading) {
               return const Center(child: CircularProgressIndicator());
             }
             if (view.blocks.isEmpty) {
               return const Center(
-                child: Text('No OCR content available for this book yet.'),
+                child: Text('No content available for this book yet.'),
               );
             }
+
             final EdgeInsets safePadding = MediaQuery.of(context).padding;
             return Container(
               color: Theme.of(context).scaffoldBackgroundColor,
@@ -144,9 +156,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     const SizedBox(height: 28),
                 itemBuilder: (BuildContext context, int index) {
                   if (index >= view.blocks.length) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
                   }
-                  final block = view.blocks[index];
+                  final ReaderBlock block = view.blocks[index];
                   return KeyedSubtree(
                     key: _blockKeys[index],
                     child: Column(
@@ -178,9 +193,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               ),
             );
           },
-          error: (Object error, StackTrace stackTrace) =>
-              Center(child: Text('$error')),
-          loading: () => const Center(child: CircularProgressIndicator()),
         ),
       ),
     );
