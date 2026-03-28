@@ -67,7 +67,7 @@ You can start reading before the full book finishes processing. The first page a
 
 | Channel | Link |
 |---|---|
-| **Alpha** | [Download APK](https://github.com/caffeineaddicteddev/Leaf-PDF-Reader/releases) |
+| **Alpha** | [Download APK](https://github.com/caffeineaddicteddev/Leaf-Reader/releases) |
 
 **How to install:**
 1. Download the APK from the link above
@@ -275,7 +275,7 @@ The JSON files grow continuously during processing. The reader watches `_clean.j
 
 ```bash
 # Clone the repository
-git clone https://github.com/caffeineaddicteddev/leaf.git
+git clone https://github.com/caffeineaddicteddev/Leaf-Reader.git
 cd leaf
 
 # Install dependencies
