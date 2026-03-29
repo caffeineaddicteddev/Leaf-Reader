@@ -53,7 +53,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   void dispose() {
     _saveDebounce?.cancel();
     _refreshTimer?.cancel();
-    _persistVisiblePage();
+    if (_didInitialRestore) {
+      _persistVisiblePage();
+    }
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
@@ -71,7 +73,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       canPop: false,
       onPopInvokedWithResult: (bool didPop, Object? result) {
         if (!didPop && mounted) {
-          _persistVisiblePage();
+          if (_didInitialRestore) {
+            _persistVisiblePage();
+          }
           context.go(AppRoutes.library);
         }
       },
@@ -242,16 +246,29 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     if (targetIndex >= _blockKeys.length) {
       return;
     }
-    final BuildContext? targetContext = _blockKeys[targetIndex].currentContext;
-    if (targetContext == null) {
-      return;
-    }
+
     _isRestoring = true;
-    await Scrollable.ensureVisible(
-      targetContext,
-      duration: const Duration(milliseconds: 220),
-      alignment: 0,
-    );
+
+    // If the target block isn't built yet (lazy loading), we need to jump near it first.
+    if (_blockKeys[targetIndex].currentContext == null) {
+      // Estimate 1200 pixels per block as a rough heuristic to bring it into the "cache extent"
+      final double estimatedOffset = targetIndex * 1200.0;
+      _scrollController.jumpTo(
+        estimatedOffset.clamp(0, _scrollController.position.maxScrollExtent),
+      );
+      // Wait for a frame to allow the ListView to build the items at the new offset
+      await WidgetsBinding.instance.endOfFrame;
+    }
+
+    final BuildContext? targetContext = _blockKeys[targetIndex].currentContext;
+    if (targetContext != null) {
+      await Scrollable.ensureVisible(
+        targetContext,
+        duration: const Duration(milliseconds: 220),
+        alignment: 0,
+      );
+    }
+
     _didInitialRestore = true;
     _pendingRestorePage = null;
     _isRestoring = false;
@@ -287,6 +304,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   Future<void> _persistVisiblePage() async {
+    if (!_didInitialRestore) {
+      return;
+    }
     final AsyncValue<ReaderViewData> viewAsync = ref.read(
       readerViewProvider(widget.bookId),
     );
