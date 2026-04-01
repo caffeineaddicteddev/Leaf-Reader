@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/json/processing_state_manager.dart';
 import '../domain/models/book.dart';
 import '../domain/models/processing_continuation_state.dart';
-import '../domain/models/processing_status.dart';
 import '../services/reader/reader_ai_service.dart';
 import '../services/reader/reader_content_service.dart';
 import 'book_providers.dart';
@@ -61,7 +60,8 @@ final continuationStateProvider =
           aiPending: aiPending,
           nextOcrPage: book.ocrProgress + 1,
           nextAiPage: book.aiProgress > 0 ? book.aiProgress + 1 : 1,
-          firstGeminiBatchComplete: book.aiProgress >= 10 ||
+          firstGeminiBatchComplete:
+              book.aiProgress >= 10 ||
               (book.aiProgress > 0 && book.totalPages < 10),
         );
       }

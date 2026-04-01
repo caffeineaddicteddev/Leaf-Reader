@@ -30,8 +30,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - UI/
 hooks:
   user_defines:
     sqlite3:
