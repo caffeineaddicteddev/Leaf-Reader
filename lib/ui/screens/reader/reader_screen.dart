@@ -26,6 +26,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   Timer? _refreshTimer;
   Timer? _saveDebounce;
+  Timer? _restoreRetryTimer;
   int? _pendingRestorePage;
   int? _lastSavedPage;
   bool _didInitialRestore = false;
@@ -49,9 +50,30 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Listen for the first time readerViewProvider transitions from
+    // loading → data. When it does, kick off the one-shot page restore.
+    // Using ref.listen here (outside build) is the correct Riverpod pattern.
+    ref.listen<AsyncValue<ReaderViewData>>(
+      readerViewProvider(widget.bookId),
+      (AsyncValue<ReaderViewData>? previous, AsyncValue<ReaderViewData> next) {
+        final ReaderViewData? view = next.valueOrNull;
+        if (view == null || view.blocks.isEmpty) return;
+        // Only restore once per open (or once per pending restore from AI toggle).
+        if (_didInitialRestore && _pendingRestorePage == null) return;
+        final Book? book = ref.read(bookProvider(widget.bookId)).valueOrNull;
+        final int targetPage = _pendingRestorePage ?? book?.lastReadPage ?? 1;
+        _attemptRestore(targetPage, view);
+      },
+    );
+  }
+
+  @override
   void dispose() {
     _saveDebounce?.cancel();
     _refreshTimer?.cancel();
+    _restoreRetryTimer?.cancel();
     _persistVisiblePage();
     _scrollController
       ..removeListener(_onScroll)
@@ -126,9 +148,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               );
             }
 
-            final Book? book = bookAsync.valueOrNull;
             _syncKeys(view.blocks.length);
-            _scheduleRestore(book, view);
 
             if (view.blocks.isEmpty && view.showLoading) {
               return const Center(child: CircularProgressIndicator());
@@ -217,45 +237,49 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
   }
 
-  void _scheduleRestore(Book? book, ReaderViewData view) {
-    if (book == null || view.blocks.isEmpty) {
-      return;
-    }
-    final int restorePage = _pendingRestorePage ?? book.lastReadPage;
-    if (_didInitialRestore && _pendingRestorePage == null) {
-      return;
-    }
+  /// Schedules a restore with a retry mechanism. The first attempt fires after
+  /// one post-frame delay. If the block context isn't attached yet (possible
+  /// in the very first frame), it retries once after 200ms.
+  void _attemptRestore(int page, ReaderViewData view) {
+    _didInitialRestore = true;
+    _pendingRestorePage = null;
+    _restoreRetryTimer?.cancel();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
+      if (!mounted) return;
+      final bool success = _tryScrollToPage(page, view);
+      if (!success) {
+        // Context wasn't ready in the first frame — retry once after a short
+        // delay to allow the ListView to fully lay out its children.
+        _restoreRetryTimer = Timer(const Duration(milliseconds: 250), () {
+          if (!mounted) return;
+          _tryScrollToPage(page, view);
+        });
       }
-      _restoreToPage(restorePage, view);
     });
   }
 
-  Future<void> _restoreToPage(int page, ReaderViewData view) async {
+  bool _tryScrollToPage(int page, ReaderViewData view) {
     final int index = view.blocks.indexWhere(
       (ReaderBlock block) => block.sourcePages.contains(page),
     );
-    if (index == -1) {
-      return;
-    }
-    if (index >= _blockKeys.length) {
-      return;
+    if (index == -1 || index >= _blockKeys.length) {
+      // Page not in loaded blocks — nothing to scroll to.
+      return true; // treat as handled so we don't retry forever
     }
     final BuildContext? targetContext = _blockKeys[index].currentContext;
     if (targetContext == null) {
-      return;
+      return false; // not laid out yet — caller should retry
     }
     _isRestoring = true;
-    await Scrollable.ensureVisible(
+    Scrollable.ensureVisible(
       targetContext,
       duration: const Duration(milliseconds: 220),
       alignment: 0,
-    );
-    _didInitialRestore = true;
-    _pendingRestorePage = null;
-    _isRestoring = false;
+    ).then((_) {
+      if (mounted) _isRestoring = false;
+    });
+    return true;
   }
 
   int? _resolveVisiblePage(List<ReaderBlock> blocks) {
@@ -314,6 +338,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         viewAsync.valueOrNull?.blocks ?? <ReaderBlock>[];
     final int currentPage = _resolveVisiblePage(blocks) ?? 1;
     _pendingRestorePage = currentPage;
+    _didInitialRestore = false; // re-arm restore for the upcoming content reload
     await ref
         .read(bookRepositoryProvider)
         .updateLastReadPage(id: widget.bookId, lastReadPage: currentPage);
