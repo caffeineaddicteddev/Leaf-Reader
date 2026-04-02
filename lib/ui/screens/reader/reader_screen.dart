@@ -76,12 +76,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           leading: IconButton(
             onPressed: () {
               _persistVisiblePage();
               context.go(AppRoutes.library);
             },
-            icon: const Icon(Icons.arrow_back),
+            icon: Icon(
+              Icons.arrow_back,
+              color: Theme.of(context).colorScheme.primary,
+            ),
             tooltip: 'Back to library',
           ),
           titleSpacing: 0,
@@ -101,10 +107,21 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   }
                 },
                 itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                  CheckedPopupMenuItem<String>(
+                  PopupMenuItem<String>(
                     value: 'toggle_ai',
-                    checked: view.aiModeEnabled,
-                    child: const Text('AI Mode'),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: <Widget>[
+                        const Text('AI Mode'),
+                        Switch(
+                          value: view.aiModeEnabled,
+                          onChanged: (bool value) {
+                            Navigator.pop(context);
+                            _toggleAiMode(value);
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -142,53 +159,163 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             final EdgeInsets safePadding = MediaQuery.of(context).padding;
             return Container(
               color: Theme.of(context).scaffoldBackgroundColor,
-              child: ListView.separated(
+              child: CustomScrollView(
                 controller: _scrollController,
-                padding: EdgeInsets.fromLTRB(
-                  22,
-                  18,
-                  22,
-                  safePadding.bottom + 28,
-                ),
-                itemCount: view.blocks.length + (view.showLoading ? 1 : 0),
-                separatorBuilder: (BuildContext context, int index) =>
-                    const SizedBox(height: 28),
-                itemBuilder: (BuildContext context, int index) {
-                  if (index >= view.blocks.length) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 32),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  final ReaderBlock block = view.blocks[index];
-                  return KeyedSubtree(
-                    key: _blockKeys[index],
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          '${block.pageLabel}${block.aiCorrected ? ' - AI corrected' : ' - OCR'}',
-                          style: Theme.of(context).textTheme.labelLarge
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                        const SizedBox(height: 14),
-                        SelectionArea(
-                          child: Text(
-                            block.text.isEmpty ? '[Empty page]' : block.text,
-                            style: TextStyle(
-                              fontSize: 17,
-                              height: 1.68,
-                              color: Theme.of(context).colorScheme.onSurface,
+                slivers: <Widget>[
+                  if (book != null)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(22, 32, 22, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              book.name,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .headlineMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface,
+                                    fontFamily: 'Inter',
+                                    height: 1.2,
+                                  ),
                             ),
-                          ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${_formatDate(book.updatedAt)}${book.author.isNotEmpty ? ' • Author: ${book.author}' : ''}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelMedium
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: 'Inter',
+                                  ),
+                            ),
+                            const SizedBox(height: 24),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
-                  );
-                },
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(22, 18, 22, 0),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (BuildContext context, int index) {
+                          final int itemIndex = index ~/ 2;
+                          if (index.isOdd) {
+                            return const SizedBox(height: 28);
+                          }
+
+                          final ReaderBlock block = view.blocks[itemIndex];
+                          return KeyedSubtree(
+                            key: _blockKeys[itemIndex],
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  '${block.pageLabel}${block.aiCorrected ? ' - AI corrected' : ' - OCR'}',
+                                  style: Theme.of(context).textTheme.labelLarge
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
+                                        fontWeight: FontWeight.w700,
+                                        fontFamily: 'Inter',
+                                      ),
+                                ),
+                                const SizedBox(height: 14),
+                                SelectionArea(
+                                  child: Text(
+                                    block.text.isEmpty
+                                        ? '[Empty page]'
+                                        : block.text,
+                                    style: TextStyle(
+                                      fontSize: 17,
+                                      height: 1.68,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface,
+                                      fontFamily: 'Inter',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        childCount: view.blocks.isEmpty
+                            ? 0
+                            : (view.blocks.length * 2 - 1),
+                      ),
+                    ),
+                  ),
+                  if (view.showLoading)
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 32),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                    ),
+                  if (book != null && view.blocks.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 48,
+                          horizontal: 22,
+                        ),
+                        child: Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: Container(
+                                height: 1,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerHighest
+                                    .withValues(alpha: 0.5),
+                              ),
+                            ),
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16),
+                              child: Text(
+                                'PAGE ${_resolveVisiblePage(view.blocks) ?? 1} OF ${book.totalPages}',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant
+                                          .withValues(alpha: 0.4),
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 2,
+                                      fontFamily: 'Inter',
+                                    ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Container(
+                                height: 1,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerHighest
+                                    .withValues(alpha: 0.5),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  SliverPadding(
+                    padding: EdgeInsets.only(bottom: safePadding.bottom + 28),
+                  ),
+                ],
               ),
             );
           },
@@ -306,6 +433,24 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     ref.invalidate(bookProvider(widget.bookId));
   }
 
+  String _formatDate(DateTime date) {
+    final List<String> months = <String>[
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
   Future<void> _toggleAiMode(bool enabled) async {
     final AsyncValue<ReaderViewData> viewAsync = ref.read(
       readerViewProvider(widget.bookId),
@@ -333,34 +478,15 @@ class _ReaderTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String? subtitle = book == null || book!.author.trim().isEmpty
-        ? null
-        : book!.author.trim();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(
-          book?.name ?? 'Reader',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        if (subtitle != null) ...<Widget>[
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: 0.64),
-            ),
+    return Text(
+      book?.name ?? 'Reader',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: Theme.of(context).colorScheme.primary,
+            fontFamily: 'Inter',
           ),
-        ],
-      ],
     );
   }
 }
