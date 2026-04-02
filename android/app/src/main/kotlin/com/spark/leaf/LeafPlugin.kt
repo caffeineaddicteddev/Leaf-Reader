@@ -119,8 +119,11 @@ class LeafPlugin : FlutterPlugin, MethodCallHandler {
         copyAssetIfMissing("tessdata/ben.traineddata", File(tessdataDir, "ben.traineddata"))
         copyAssetIfMissing("tessdata/eng.traineddata", File(tessdataDir, "eng.traineddata"))
         synchronized(tessLock) {
-            if (!tessApis.containsKey("ben+eng")) {
-                tessApis["ben+eng"] = createTesseractApi("ben+eng")
+            if (!tessApis.containsKey("ben")) {
+                tessApis["ben"] = createTesseractApi("ben")
+            }
+            if (!tessApis.containsKey("eng")) {
+                tessApis["eng"] = createTesseractApi("eng")
             }
         }
     }
