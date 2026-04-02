@@ -28,11 +28,15 @@ final Provider<ReaderAiService> readerAiServiceProvider =
 final Provider<ProcessingStateManager> processingStateManagerProvider =
     Provider<ProcessingStateManager>((Ref ref) => ProcessingStateManager());
 
+final StateProviderFamily<int, String> readerRefreshProvider =
+    StateProvider.family<int, String>((Ref ref, String bookId) => 0);
+
 final continuationStateProvider =
     FutureProvider.family<ProcessingContinuationState, String>((
       Ref ref,
       String bookId,
     ) async {
+      ref.watch(readerRefreshProvider(bookId));
       final Book? book = await ref.watch(bookProvider(bookId).future);
       if (book == null) {
         return ProcessingContinuationState.initial(bookId);
@@ -72,6 +76,7 @@ final readerViewProvider = FutureProvider.family<ReaderViewData, String>((
   Ref ref,
   String bookId,
 ) async {
+  ref.watch(readerRefreshProvider(bookId));
   final Book? book = await ref.watch(bookProvider(bookId).future);
   if (book == null) {
     return const ReaderViewData(

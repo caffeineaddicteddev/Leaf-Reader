@@ -43,8 +43,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         return;
       }
       ref.invalidate(bookProvider(widget.bookId));
-      ref.invalidate(continuationStateProvider(widget.bookId));
-      ref.invalidate(readerViewProvider(widget.bookId));
+      ref.read(readerRefreshProvider(widget.bookId).notifier).state++;
       ref.read(pipelineProvider(widget.bookId).notifier).continueFromReader();
     });
   }
@@ -238,11 +237,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final int index = view.blocks.indexWhere(
       (ReaderBlock block) => block.sourcePages.contains(page),
     );
-    final int targetIndex = index == -1 ? 0 : index;
-    if (targetIndex >= _blockKeys.length) {
+    if (index == -1) {
       return;
     }
-    final BuildContext? targetContext = _blockKeys[targetIndex].currentContext;
+    if (index >= _blockKeys.length) {
+      return;
+    }
+    final BuildContext? targetContext = _blockKeys[index].currentContext;
     if (targetContext == null) {
       return;
     }

@@ -1120,3 +1120,27 @@ Read these before writing any code.
 9. **`[NO_CONTENT]` handling.** If the AI returns exactly `[NO_CONTENT]` for a chunk (meaning the tokenizer sent preface/metadata), write an empty CleanPage for those source pages. Do not show `[NO_CONTENT]` string in the reader.
 
 10. **Language cannot be changed after book creation.** The tessdata or ML Kit model is baked into the OCR pipeline run. Changing it mid-run would produce inconsistent `_ocr.json` content. Enforce this in the Edit Book sheet by making the language field read-only.
+
+---
+
+## 19. Bug Fixes: Reader UI and Tesseract
+
+### Proposed Changes
+
+#### [NEW] .workflow/bugs/bug_002.md
+#### [NEW] .workflow/bugs/bug_003.md
+
+Create the required bug logs.
+
+#### [MODIFY] lib/ui/screens/reader/reader_screen.dart
+
+- **Reader UI Jumping Fix:** Remove `ref.invalidate` from the `_refreshTimer` cycle. Instead, introduce a Riverpod state mechanism (like invalidating a secondary dependency that causes `readerViewProvider` to refresh without losing its `valueOrNull` prior state) or fix `_scheduleRestore` by checking `index == -1`. I'll implement the fix in `_scheduleRestore` so it returns if the target page index isn't found in the loaded blocks yet instead of scrolling to index 0. This prevents restoring to page 0 prematurely which causes the jumping.
+- **Persistence Fix:** We will switch the `lastReadPage` persistence to use `shared_preferences` for instantaneous persistence that isn't vulnerable to racing with `Book` DB updates. We can update `reader_screen.dart` to rely on standard `shared_preferences` for restoring instead of querying the DB for `book.lastReadPage` during every scroll debouncer. Alternatively, we keep DB but ensure we don't save page `0` when jump occurs.
+
+#### [MODIFY] android/app/src/main/kotlin/com/spark/leaf/LeafPlugin.kt
+
+- **Tesseract Bundled Data Download Fix:** In `ensureTessData`, we'll split the `tessCode` parameter by `+` (e.g., `ben+eng`) and independently check and download each constituent `.traineddata` file. Since `ben` and `eng` are bundled, `destination.exists()` will correctly catch both, avoiding unnecessary downloads.
+
+## User Review Required
+> [!IMPORTANT]
+> The implementation plan switches `lastReadPage` tracking to be reliable. We will update `reader_screen.dart` and `LeafPlugin.kt`. Please review this plan.

@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -51,8 +53,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final Color onSurfaceVariant = colorScheme.onSurfaceVariant;
     final Color primary = colorScheme.primary;
     final Color onPrimary = colorScheme.onPrimary;
-    final Color secondaryContainer = colorScheme.secondaryContainer;
-    final Color onSecondaryContainer = colorScheme.onSecondaryContainer;
     final Color surfaceContainerLow = isDark ? colorScheme.surfaceContainerLow : const Color(0xFFF2F3FA);
     final Color surfaceContainerLowest = isDark ? colorScheme.surfaceContainerLowest : const Color(0xFFFFFFFF);
     final Color surfaceContainerHigh = isDark ? colorScheme.surfaceContainerHigh : const Color(0xFFE5E8F0);
@@ -232,22 +232,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton.icon(
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
                           onPressed:
                               _isMigratingStorage
                                   ? null
                                   : () => _changeLibraryDirectory(settings),
-                          style: TextButton.styleFrom(
-                            backgroundColor: secondaryContainer,
-                            foregroundColor: onSecondaryContainer,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 12,
-                            ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primary,
+                            foregroundColor: onPrimary,
+                            minimumSize: const Size.fromHeight(48),
+                            elevation: 0,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(999),
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
                           icon: Icon(
@@ -260,10 +258,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             _isMigratingStorage
                                 ? 'Migrating Library...'
                                 : 'Change Saved Directory',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
                       ),
@@ -282,18 +277,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      _buildInputFieldLabel('AI API ENDPOINT', onSurfaceVariant),
-                      const SizedBox(height: 8),
-                      _buildTextField(
-                        hintText: 'https://api.openai.com/v1',
-                        suffixIcon: Icons.link,
-                        enabled: false, // Placeholder endpoint as per design
-                        surfaceContainerHighest: surfaceContainerHighest,
-                        onSurface: onSurface,
-                        onSurfaceVariant: onSurfaceVariant,
-                        outlineVariant: outlineVariant,
-                      ),
-                      const SizedBox(height: 16),
                       _buildInputFieldLabel('API KEY', onSurfaceVariant),
                       const SizedBox(height: 8),
                       _buildTextField(
@@ -354,7 +337,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                           icon: const Icon(Icons.save_outlined, size: 18),
                           label: const Text(
-                            'Update API Configuration',
+                            'Save AI configuration',
                             style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
@@ -474,7 +457,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       child: Container(
         decoration: BoxDecoration(
           color: isSelected ? primary : surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(24),
           boxShadow:
               isSelected
                   ? [
@@ -584,6 +567,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _changeLibraryDirectory(AppSettings settings) async {
+    if (Platform.isAndroid) {
+      final statusManage = await Permission.manageExternalStorage.request();
+      final statusStorage = await Permission.storage.request();
+      if (!statusManage.isGranted && !statusStorage.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Storage permission is required to change library directory.')),
+          );
+        }
+        return;
+      }
+    }
+
     final String? selectedPath = await FilePicker.platform.getDirectoryPath(
       dialogTitle: 'Select library folder',
     );

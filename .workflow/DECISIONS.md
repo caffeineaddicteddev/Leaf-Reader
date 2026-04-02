@@ -60,3 +60,11 @@
 - **Context**: Routing between Tesseract and ML Kit.
 - **Decision**: Currently handled by App Layer logic / user interaction rather than automated fastText detection.
 - **Consequences**: Simplified native plugin logic.
+
+## [DECISION-009] Use permission_handler for Scoped Storage
+- **Date**: 2026-04-02
+- **Status**: Accepted
+- **Context**: On Android 11+, reading/writing to arbitrary external directories selected by `file_picker` fails using standard `dart:io` without the `MANAGE_EXTERNAL_STORAGE` permission.
+- **Decision**: Add `permission_handler` dependency and request `MANAGE_EXTERNAL_STORAGE` when changing the library directory to an external path.
+- **Alternatives considered**: Using `shared_storage` (more complex API, requires migrating entire app away from `dart:io`).
+- **Consequences**: Fixes book creation failures on Android 11+ after picking external folders. App needs to prompt user for "All Files Access".

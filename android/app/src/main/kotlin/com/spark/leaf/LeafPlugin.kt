@@ -217,11 +217,17 @@ class LeafPlugin : FlutterPlugin, MethodCallHandler {
     }
 
     private fun ensureTessData(tessCode: String): Boolean {
-        val destination = File(context.filesDir, "tessdata/$tessCode.traineddata")
-        if (destination.exists()) {
-            return true
+        val codes = tessCode.split("+")
+        var allPresent = true
+        for (code in codes) {
+            val destination = File(context.filesDir, "tessdata/$code.traineddata")
+            if (!destination.exists()) {
+                if (!downloadTessData(code, destination)) {
+                    allPresent = false
+                }
+            }
         }
-        return downloadTessData(tessCode, destination)
+        return allPresent
     }
 
     private fun recognizerFor(script: String): TextRecognizer {
