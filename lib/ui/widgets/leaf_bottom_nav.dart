@@ -23,14 +23,14 @@ class LeafBottomNav extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: surface.withOpacity(0.8),
+        color: surface.withValues(alpha: 0.8),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
         border: Border(
-          top: BorderSide(color: outlineVariant.withOpacity(0.2), width: 1),
+          top: BorderSide(color: outlineVariant.withValues(alpha: 0.2), width: 1),
         ),
         boxShadow: [
           BoxShadow(
-            color: (isDark ? Colors.black : const Color(0xFF2E333A)).withOpacity(0.06),
+            color: (isDark ? Colors.black : const Color(0xFF2E333A)).withValues(alpha: 0.06),
             blurRadius: 24,
             offset: const Offset(0, -4),
           ),

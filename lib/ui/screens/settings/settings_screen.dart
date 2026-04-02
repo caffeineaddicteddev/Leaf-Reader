@@ -111,7 +111,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       const SizedBox(width: 12),
                       Switch(
                         value: _aiMode,
-                        activeColor: primary,
+                        activeThumbColor: primary,
                         onChanged: (bool value) {
                           setState(() {
                             _aiMode = value;
@@ -193,7 +193,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                           Icon(
                             Icons.storage_rounded,
-                            color: primary.withOpacity(0.4),
+                            color: primary.withValues(alpha: 0.4),
                           ),
                         ],
                       ),
@@ -204,7 +204,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           color: surfaceContainerLow,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: outlineVariant.withOpacity(0.1),
+                            color: outlineVariant.withValues(alpha: 0.1),
                           ),
                         ),
                         child: Row(
@@ -346,7 +346,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: primary,
                             foregroundColor: onPrimary,
-                            height: 48,
+                            minimumSize: const Size.fromHeight(48),
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -376,7 +376,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          color: onSurfaceVariant.withOpacity(0.6),
+                          color: onSurfaceVariant.withValues(alpha: 0.6),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -394,7 +394,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          color: onSurfaceVariant.withOpacity(0.6),
+                          color: onSurfaceVariant.withValues(alpha: 0.6),
                         ),
                       ),
                     ],
@@ -479,7 +479,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               isSelected
                   ? [
                     BoxShadow(
-                      color: primary.withOpacity(0.2),
+                      color: primary.withValues(alpha: 0.2),
                       blurRadius: 8,
                       offset: const Offset(0, 4),
                     ),
@@ -562,7 +562,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ? IconButton(
                     icon: Icon(
                       suffixIcon,
-                      color: onSurfaceVariant.withOpacity(0.6),
+                      color: onSurfaceVariant.withValues(alpha: 0.6),
                       size: 20,
                     ),
                     onPressed: onSuffixPressed,

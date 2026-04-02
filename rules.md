@@ -7,7 +7,6 @@
 
 **2. Log Rules**
 - Every agent session that touches code must produce at least one log entry in the current `.workflow/logs/log_XXX.md`.
-- Log files cap at 10 entries. Create the next numbered file when full.
 - Logs must be written *after* the work is done, not speculatively.
 
 **3. Bug Rules**
