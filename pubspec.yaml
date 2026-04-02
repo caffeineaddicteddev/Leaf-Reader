@@ -20,6 +20,8 @@ dependencies:
   file_picker: ^10.3.3
   uuid: ^4.5.1
   intl: ^0.20.2
+  url_launcher: ^6.3.2
+  flutter_svg: ^2.2.4
 
 dev_dependencies:
   flutter_test:
