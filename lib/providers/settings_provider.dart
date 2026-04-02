@@ -39,10 +39,10 @@ settingsProvider = FutureProvider<AppSettings>((Ref ref) async {
   }
   return AppSettings(
     aiApiKey: await repository.getValue('ai_api_key') ?? '',
-    aiMode: (await repository.getValue('ai_mode') ?? 'true') == 'true',
+    aiMode: (await repository.getValue('ai_mode') ?? 'false') == 'true',
     geminiModel: geminiModel,
     gemmaModel: await repository.getValue('gemma_model') ?? 'gemma-3-27b-it',
-    theme: await repository.getValue('theme') ?? 'light',
+    theme: await repository.getValue('theme') ?? 'system',
     libraryPath: await repository.getValue('library_path') ?? '',
   );
 });

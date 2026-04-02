@@ -27,7 +27,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final TextEditingController _gemmaController = TextEditingController();
   Timer? _saveDebounce;
   bool _obscureApiKey = true;
-  bool _aiMode = true;
+  bool _aiMode = false;
   bool _didInitialize = false;
   bool _isMigratingStorage = false;
   String _theme = 'system';
@@ -45,7 +45,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(settingsProvider);
     final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Design Colors adapted to current theme
     final Color surface = colorScheme.surface;
@@ -53,10 +52,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final Color onSurfaceVariant = colorScheme.onSurfaceVariant;
     final Color primary = colorScheme.primary;
     final Color onPrimary = colorScheme.onPrimary;
-    final Color surfaceContainerLow = isDark ? colorScheme.surfaceContainerLow : const Color(0xFFF2F3FA);
-    final Color surfaceContainerLowest = isDark ? colorScheme.surfaceContainerLowest : const Color(0xFFFFFFFF);
-    final Color surfaceContainerHigh = isDark ? colorScheme.surfaceContainerHigh : const Color(0xFFE5E8F0);
-    final Color surfaceContainerHighest = isDark ? colorScheme.surfaceContainerHighest : const Color(0xFFDEE2EC);
+    final Color surfaceContainerLow = colorScheme.surfaceContainerLow;
+    final Color surfaceContainerLowest = colorScheme.surfaceContainer; // Changed to match theme standard
+    final Color surfaceContainerHigh = colorScheme.surfaceContainerHigh;
+    final Color surfaceContainerHighest = colorScheme.surfaceContainerHighest;
     final Color outlineVariant = colorScheme.outlineVariant;
 
     return Scaffold(
@@ -84,6 +83,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   fontWeight: FontWeight.w900,
                   color: onSurface,
                   letterSpacing: -1,
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // Appearance Section
+              _buildSectionHeader(Icons.palette_outlined, 'APPEARANCE', primary, onSurfaceVariant),
+              _buildSectionContainer(
+                surfaceContainerLow: surfaceContainerLow,
+                padding: const EdgeInsets.all(8),
+                child: GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 1.1,
+                  children: <Widget>[
+                    _buildThemeButton('light', Icons.light_mode_outlined, 'Light', primary, onPrimary, surfaceContainerHigh, onSurfaceVariant),
+                    _buildThemeButton('dark', Icons.dark_mode_outlined, 'Dark', primary, onPrimary, surfaceContainerHigh, onSurfaceVariant),
+                    _buildThemeButton(
+                      'system',
+                      Icons.settings_brightness_outlined,
+                      'System',
+                      primary,
+                      onPrimary,
+                      surfaceContainerHigh,
+                      onSurfaceVariant,
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 32),
@@ -121,35 +149,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                     ],
                   ),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Appearance Section
-              _buildSectionHeader(Icons.palette_outlined, 'APPEARANCE', primary, onSurfaceVariant),
-              _buildSectionContainer(
-                surfaceContainerLow: surfaceContainerLow,
-                padding: const EdgeInsets.all(8),
-                child: GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 1.1,
-                  children: <Widget>[
-                    _buildThemeButton('light', Icons.light_mode_outlined, 'Light', primary, onPrimary, surfaceContainerHigh, onSurfaceVariant),
-                    _buildThemeButton('dark', Icons.dark_mode_outlined, 'Dark', primary, onPrimary, surfaceContainerHigh, onSurfaceVariant),
-                    _buildThemeButton(
-                      'system',
-                      Icons.settings_brightness_outlined,
-                      'System',
-                      primary,
-                      onPrimary,
-                      surfaceContainerHigh,
-                      onSurfaceVariant,
-                    ),
-                  ],
                 ),
               ),
               const SizedBox(height: 32),

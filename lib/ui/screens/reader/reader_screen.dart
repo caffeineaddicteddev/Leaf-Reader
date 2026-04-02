@@ -156,6 +156,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         body: Builder(
           builder: (BuildContext context) {
             final ReaderViewData? view = readerViewAsync.valueOrNull;
+            final Book? book = bookAsync.valueOrNull;
             if (view == null) {
               return readerViewAsync.when(
                 data: (_) => const SizedBox.shrink(),

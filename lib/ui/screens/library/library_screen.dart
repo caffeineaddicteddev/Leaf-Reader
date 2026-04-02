@@ -57,7 +57,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                           hintText: 'Search your books and documents...',
                           prefixIcon: const Icon(Icons.search),
                           filled: true,
-                          fillColor: Theme.of(context).colorScheme.surface,
+                          fillColor: Theme.of(context).colorScheme.surfaceContainerHigh,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(20),
                             borderSide: BorderSide.none,
@@ -82,7 +82,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                           crossAxisCount: 2,
                           crossAxisSpacing: 18,
                           mainAxisSpacing: 18,
-                          childAspectRatio: 0.68,
+                          childAspectRatio: 0.62,
                         ),
                     delegate: SliverChildBuilderDelegate((
                       BuildContext context,

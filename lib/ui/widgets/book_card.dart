@@ -23,7 +23,7 @@ class BookCard extends StatelessWidget {
     final theme = Theme.of(context);
     final String statusLabel = switch (book.status) {
       BookProcessingState.processing => 'Processing',
-      BookProcessingState.ready => 'Ready',
+      BookProcessingState.ready => '${book.lastReadPage} / ${book.totalPages}',
       BookProcessingState.error => 'Error',
       BookProcessingState.pending => 'Pending',
     };
@@ -56,6 +56,7 @@ class BookCard extends StatelessWidget {
                       coverPath: book.coverPath,
                       progress: progress,
                       statusColor: theme.colorScheme.primary,
+                      showProgress: book.status == BookProcessingState.processing || book.status == BookProcessingState.pending,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -111,11 +112,13 @@ class _BookCover extends StatelessWidget {
     required this.coverPath,
     required this.progress,
     required this.statusColor,
+    required this.showProgress,
   });
 
   final String? coverPath;
   final double progress;
   final Color statusColor;
+  final bool showProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -136,15 +139,21 @@ class _BookCover extends StatelessWidget {
             Image.file(coverFile, fit: BoxFit.cover)
           else
             DecoratedBox(
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: <Color>[
-                    Color(0xFFD8DFEC),
-                    Color(0xFFC9D3E5),
-                    Color(0xFFE8ECF5),
-                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: Theme.of(context).brightness == Brightness.dark
+                      ? <Color>[
+                          const Color(0xFF27272A), // Zinc-800
+                          const Color(0xFF18181B), // Zinc-900
+                          const Color(0xFF09090B), // Zinc-950
+                        ]
+                      : <Color>[
+                          const Color(0xFFE2E8F0),
+                          const Color(0xFFCBD5E1),
+                          const Color(0xFFF1F5F9),
+                        ],
                 ),
               ),
               child: Center(
@@ -155,15 +164,16 @@ class _BookCover extends StatelessWidget {
                 ),
               ),
             ),
-          Positioned(
-            top: 10,
-            right: 10,
-            child: SizedBox(
-              height: 36,
-              width: 36,
-              child: ProgressRing(progress: progress),
+          if (showProgress)
+            Positioned(
+              top: 10,
+              right: 10,
+              child: SizedBox(
+                height: 36,
+                width: 36,
+                child: ProgressRing(progress: progress),
+              ),
             ),
-          ),
         ],
       ),
     );
