@@ -8,7 +8,6 @@ import '../../../providers/book_providers.dart';
 import '../../../providers/pipeline_provider.dart';
 import '../../router.dart';
 import '../../widgets/book_card.dart';
-import '../../widgets/leaf_bottom_nav.dart';
 import '../create_book/create_book_sheet.dart';
 
 class LibraryScreen extends ConsumerStatefulWidget {
@@ -35,7 +34,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         },
         child: const Icon(Icons.add),
       ),
-      bottomNavigationBar: const LeafBottomNav(index: 0),
       body: booksAsync.when(
         data: (books) {
           return CustomScrollView(
@@ -89,9 +87,38 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                       int index,
                     ) {
                       final book = books[index];
+                      final bool isInitialProcessing =
+                          (book.status == BookProcessingState.processing ||
+                              book.status == BookProcessingState.pending) &&
+                          book.ocrProgress < 10 &&
+                          book.aiProgress < 10;
+                      final bool hasProcessedContent =
+                          book.status == BookProcessingState.ready ||
+                          book.ocrProgress >= 10 ||
+                          book.aiProgress >= 10;
                       return BookCard(
                         book: book,
-                        onTap: () => context.go(AppRoutes.reader(book.id)),
+                        onTap: () {
+                          if (isInitialProcessing) {
+                            context.go(
+                              AppRoutes.processing(book.id),
+                              extra: AppNavigationDirection.forward,
+                            );
+                          } else if (hasProcessedContent) {
+                            context.go(
+                              AppRoutes.reader(
+                                book.id,
+                                initialScrollOffset: book.lastScrollOffset,
+                              ),
+                              extra: AppNavigationDirection.forward,
+                            );
+                          } else {
+                            context.go(
+                              AppRoutes.processing(book.id),
+                              extra: AppNavigationDirection.forward,
+                            );
+                          }
+                        },
                         onLongPressStart: (_) => _showBookMenu(context, book),
                       );
                     }, childCount: books.length),
@@ -174,6 +201,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                               final NavigatorState navigator = Navigator.of(
                                 context,
                               );
+                              FocusScope.of(context).unfocus();
                               await ref
                                   .read(bookRepositoryProvider)
                                   .updateMetadata(
@@ -184,7 +212,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                                     author: authorController.text.trim(),
                                   );
                               ref.invalidate(booksProvider);
-                              ref.invalidate(bookProvider(book.id));
+                              await Future<void>.delayed(Duration.zero);
                               navigator.pop();
                             },
                             child: const Text('Save Changes'),
@@ -214,6 +242,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         );
       },
     );
+    await Future<void>.delayed(Duration.zero);
     hasChanges.dispose();
     nameController.dispose();
     authorController.dispose();
@@ -254,6 +283,5 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     }
 
     ref.invalidate(booksProvider);
-    ref.invalidate(bookProvider(book.id));
   }
 }

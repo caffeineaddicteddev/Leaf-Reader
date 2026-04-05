@@ -63,7 +63,7 @@ class LeafPlugin : FlutterPlugin, MethodCallHandler {
             runCatching {
                 when (call.method) {
                     "initTesseract" -> {
-                        initTesseractInternal()
+                        initTesseractInternal(call.requireString("tessCode"))
                         null
                     }
                     "destroyTesseract" -> {
@@ -111,19 +111,18 @@ class LeafPlugin : FlutterPlugin, MethodCallHandler {
         }
     }
 
-    private fun initTesseractInternal() {
+    private fun initTesseractInternal(tessCode: String) {
         val tessdataDir = File(context.filesDir, "tessdata")
         if (!tessdataDir.exists()) {
             tessdataDir.mkdirs()
         }
-        copyAssetIfMissing("tessdata/ben.traineddata", File(tessdataDir, "ben.traineddata"))
-        copyAssetIfMissing("tessdata/eng.traineddata", File(tessdataDir, "eng.traineddata"))
+        val codes = tessCode.split("+")
+        for (code in codes) {
+            copyAssetIfMissing("tessdata/$code.traineddata", File(tessdataDir, "$code.traineddata"))
+        }
         synchronized(tessLock) {
-            if (!tessApis.containsKey("ben")) {
-                tessApis["ben"] = createTesseractApi("ben")
-            }
-            if (!tessApis.containsKey("eng")) {
-                tessApis["eng"] = createTesseractApi("eng")
+            if (!tessApis.containsKey(tessCode)) {
+                tessApis[tessCode] = createTesseractApi(tessCode)
             }
         }
     }
@@ -225,6 +224,9 @@ class LeafPlugin : FlutterPlugin, MethodCallHandler {
         for (code in codes) {
             val destination = File(context.filesDir, "tessdata/$code.traineddata")
             if (!destination.exists()) {
+                copyBundledTessDataIfAvailable(code, destination)
+            }
+            if (!destination.exists()) {
                 if (!downloadTessData(code, destination)) {
                     allPresent = false
                 }
@@ -263,6 +265,13 @@ class LeafPlugin : FlutterPlugin, MethodCallHandler {
             FileOutputStream(destination).use { output ->
                 input.copyTo(output)
             }
+        }
+    }
+
+    private fun copyBundledTessDataIfAvailable(tessCode: String, destination: File) {
+        val assetPath = "tessdata/$tessCode.traineddata"
+        runCatching {
+            copyAssetIfMissing(assetPath, destination)
         }
     }
 
@@ -319,6 +328,6 @@ class LeafPlugin : FlutterPlugin, MethodCallHandler {
     private companion object {
         const val CHANNEL_NAME = "com.spark.leaf/native"
         const val TESSDATA_BASE_URL =
-            "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main"
+            "https://raw.githubusercontent.com/tesseract-ocr/tessdata_best/main"
     }
 }

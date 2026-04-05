@@ -12,7 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../data/repositories/settings_repository.dart';
 import '../../../providers/book_providers.dart';
 import '../../../providers/settings_provider.dart';
-import '../../widgets/leaf_bottom_nav.dart';
+import '../../widgets/theme_aware_switch.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -45,13 +45,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(settingsProvider);
     final colorScheme = Theme.of(context).colorScheme;
+    final Color scaffoldBackground = Theme.of(context).scaffoldBackgroundColor;
 
     // Design Colors adapted to current theme
-    final Color surface = colorScheme.surface;
     final Color onSurface = colorScheme.onSurface;
     final Color onSurfaceVariant = colorScheme.onSurfaceVariant;
     final Color primary = colorScheme.primary;
     final Color onPrimary = colorScheme.onPrimary;
+    final Color secondary = colorScheme.secondary;
+    final Color onSecondary = colorScheme.onSecondary;
     final Color surfaceContainerLow = colorScheme.surfaceContainerLow;
     final Color surfaceContainerLowest = colorScheme.surfaceContainer; // Changed to match theme standard
     final Color surfaceContainerHigh = colorScheme.surfaceContainerHigh;
@@ -59,8 +61,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final Color outlineVariant = colorScheme.outlineVariant;
 
     return Scaffold(
-      backgroundColor: surface,
-      bottomNavigationBar: const LeafBottomNav(index: 1),
+      backgroundColor: scaffoldBackground,
       body: settingsAsync.when(
         data: (AppSettings settings) {
           if (!_didInitialize) {
@@ -73,19 +74,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           }
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(24, 60, 24, 32),
+            padding: const EdgeInsets.fromLTRB(20, 40, 20, 32),
             children: <Widget>[
               // Page Title
               Text(
                 'Settings',
-                style: TextStyle(
-                  fontSize: 40,
-                  fontWeight: FontWeight.w900,
+                style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                  fontWeight: FontWeight.w800,
                   color: onSurface,
-                  letterSpacing: -1,
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 16),
 
               // Appearance Section
               _buildSectionHeader(Icons.palette_outlined, 'APPEARANCE', primary, onSurfaceVariant),
@@ -137,129 +136,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Switch(
+                      ThemeAwareSwitch(
                         value: _aiMode,
-                        activeThumbColor: primary,
                         onChanged: (bool value) {
                           setState(() {
                             _aiMode = value;
                           });
                           _scheduleSave();
                         },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Storage Section
-              _buildSectionHeader(Icons.folder_shared_outlined, 'STORAGE', primary, onSurfaceVariant),
-              _buildSectionContainer(
-                surfaceContainerLow: surfaceContainerLow,
-                padding: const EdgeInsets.all(8),
-                child: Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: surfaceContainerLowest,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Primary Library Path',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: onSurface,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              Text(
-                                'All processed PDFs and OCR data',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Icon(
-                            Icons.storage_rounded,
-                            color: primary.withValues(alpha: 0.4),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: surfaceContainerLow,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: outlineVariant.withValues(alpha: 0.1),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.folder_outlined,
-                              color: onSurfaceVariant,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                settings.libraryPath.isEmpty
-                                    ? 'App documents directory'
-                                    : settings.libraryPath,
-                                style: TextStyle(
-                                  fontFamily: 'monospace',
-                                  fontSize: 12,
-                                  color: onSurfaceVariant,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              _isMigratingStorage
-                                  ? null
-                                  : () => _changeLibraryDirectory(settings),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primary,
-                            foregroundColor: onPrimary,
-                            minimumSize: const Size.fromHeight(48),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          icon: Icon(
-                            _isMigratingStorage
-                                ? Icons.sync_rounded
-                                : Icons.folder_open_outlined,
-                            size: 18,
-                          ),
-                          label: Text(
-                            _isMigratingStorage
-                                ? 'Migrating Library...'
-                                : 'Change Saved Directory',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
                       ),
                     ],
                   ),
@@ -326,12 +210,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         child: ElevatedButton.icon(
                           onPressed: _saveSettings,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: primary,
-                            foregroundColor: onPrimary,
+                            backgroundColor: secondary,
+                            foregroundColor: onSecondary,
                             minimumSize: const Size.fromHeight(48),
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
+                            ),
+                            side: BorderSide(
+                              color: secondary.withValues(alpha: 0.2),
                             ),
                           ),
                           icon: const Icon(Icons.save_outlined, size: 18),
@@ -344,8 +231,143 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 48),
+                const SizedBox(height: 32),
               ],
+
+              // Storage Section
+              _buildSectionHeader(Icons.folder_shared_outlined, 'STORAGE', primary, onSurfaceVariant),
+              _buildSectionContainer(
+                surfaceContainerLow: surfaceContainerLow,
+                padding: const EdgeInsets.all(8),
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: surfaceContainerLowest,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Primary Library Path',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: onSurface,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              Text(
+                                'All processed PDFs and OCR data',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Icon(
+                            Icons.storage_rounded,
+                            color: primary.withValues(alpha: 0.4),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap:
+                              _isMigratingStorage
+                                  ? null
+                                  : () => _changeLibraryDirectory(settings),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: outlineVariant.withValues(alpha: 0.1),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.folder_outlined,
+                                  color: onSurfaceVariant,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    settings.libraryPath.isEmpty
+                                        ? 'App documents directory'
+                                        : settings.libraryPath,
+                                    style: TextStyle(
+                                      fontFamily: 'monospace',
+                                      fontSize: 12,
+                                      color: onSurfaceVariant,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: onSurfaceVariant.withValues(alpha: 0.7),
+                                  size: 20,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed:
+                              _isMigratingStorage
+                                  ? null
+                                  : () => _changeLibraryDirectory(settings),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: secondary,
+                            foregroundColor: onSecondary,
+                            disabledBackgroundColor: surfaceContainerHigh,
+                            disabledForegroundColor: onSurfaceVariant,
+                            minimumSize: const Size.fromHeight(48),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            side: BorderSide(
+                              color: secondary.withValues(alpha: 0.2),
+                            ),
+                          ),
+                          icon: Icon(
+                            _isMigratingStorage
+                                ? Icons.sync_rounded
+                                : Icons.folder_open_outlined,
+                            size: 18,
+                          ),
+                          label: Text(
+                            _isMigratingStorage
+                                ? 'Migrating Library...'
+                                : 'Change Saved Directory',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 48),
 
               // Footer
               Column(
@@ -354,7 +376,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        'v0.1.0-alpha',
+                        'v0.2.0-alpha',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -398,7 +420,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 8),
                 ],
               ),
             ],
@@ -456,7 +478,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       child: Container(
         decoration: BoxDecoration(
           color: isSelected ? primary : surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(29),
+          border: Border.all(
+            color:
+                isSelected
+                    ? onPrimary.withValues(alpha: 0.12)
+                    : onSurfaceVariant.withValues(alpha: 0.22),
+          ),
           boxShadow:
               isSelected
                   ? [

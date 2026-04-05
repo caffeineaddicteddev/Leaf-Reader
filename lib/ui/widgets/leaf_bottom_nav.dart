@@ -4,19 +4,25 @@ import 'package:go_router/go_router.dart';
 import '../router.dart';
 
 class LeafBottomNav extends StatelessWidget {
-  const LeafBottomNav({required this.index, super.key});
+  const LeafBottomNav({required this.currentIndex, super.key});
 
-  final int index;
+  final int currentIndex;
 
   @override
   Widget build(BuildContext context) {
     return NavigationBar(
-      selectedIndex: index,
+      selectedIndex: currentIndex,
       onDestinationSelected: (int selectedIndex) {
-        if (selectedIndex == 0 && index != 0) {
-          context.go(AppRoutes.library);
-        } else if (selectedIndex == 1 && index != 1) {
-          context.go(AppRoutes.settings);
+        if (selectedIndex == 0 && currentIndex != 0) {
+          context.go(
+            AppRoutes.library,
+            extra: AppNavigationDirection.backward,
+          );
+        } else if (selectedIndex == 1 && currentIndex != 1) {
+          context.go(
+            AppRoutes.settings,
+            extra: AppNavigationDirection.forward,
+          );
         }
       },
       destinations: const <NavigationDestination>[

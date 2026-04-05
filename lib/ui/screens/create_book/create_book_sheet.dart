@@ -180,7 +180,10 @@ class _CreateBookSheetState extends ConsumerState<CreateBookSheet> {
 
       if (mounted) {
         navigator.pop();
-        router.go(AppRoutes.processing(bookId));
+        router.go(
+          AppRoutes.processing(bookId),
+          extra: AppNavigationDirection.forward,
+        );
       }
     } finally {
       if (mounted) {

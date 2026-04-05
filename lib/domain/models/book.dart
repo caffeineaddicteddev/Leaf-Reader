@@ -12,6 +12,7 @@ class Book {
     required this.ocrProgress,
     required this.aiProgress,
     required this.lastReadPage,
+    required this.lastScrollOffset,
     required this.languageCode,
     required this.status,
     required this.fileSize,
@@ -29,6 +30,7 @@ class Book {
   final int ocrProgress;
   final int aiProgress;
   final int lastReadPage;
+  final double lastScrollOffset;
   final String languageCode;
   final BookProcessingState status;
   final int fileSize;

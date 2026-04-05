@@ -25,6 +25,9 @@ class Books extends Table {
   IntColumn get lastReadPage =>
       integer().named('last_read_page').withDefault(const Constant(1))();
 
+  RealColumn get lastScrollOffset =>
+      real().named('last_scroll_offset').withDefault(const Constant(0.0))();
+
   TextColumn get languageCode =>
       text().named('language_code').withDefault(const Constant('ben'))();
 

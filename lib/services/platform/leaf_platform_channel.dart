@@ -8,8 +8,10 @@ class LeafPlatformChannel {
 
   final MethodChannel _channel;
 
-  Future<void> initTesseract() async {
-    await _channel.invokeMethod<void>('initTesseract');
+  Future<void> initTesseract(String tessCode) async {
+    await _channel.invokeMethod<void>('initTesseract', <String, Object?>{
+      'tessCode': tessCode,
+    });
   }
 
   Future<void> destroyTesseract() async {

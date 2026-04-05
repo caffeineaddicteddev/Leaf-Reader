@@ -23,6 +23,15 @@ class LanguageRegistry {
       bundled: true,
     ),
     OcrLanguage(
+      displayName: 'Bengali+English',
+      code: 'ben_eng',
+      engine: OcrEngine.tesseract,
+      mlkitScript: null,
+      mlkitNeedsDownload: false,
+      tessCode: 'ben+eng',
+      bundled: true,
+    ),
+    OcrLanguage(
       displayName: 'Burmese',
       code: 'mya',
       engine: OcrEngine.tesseract,

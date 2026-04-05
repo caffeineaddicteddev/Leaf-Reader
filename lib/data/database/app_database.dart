@@ -21,7 +21,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -35,9 +35,9 @@ class AppDatabase extends _$AppDatabase {
             value: 'gemini-3-flash-preview',
           ),
           SettingsCompanion.insert(key: 'gemma_model', value: 'gemma-3-27b-it'),
-          SettingsCompanion.insert(key: 'ai_mode', value: 'true'),
+          SettingsCompanion.insert(key: 'ai_mode', value: 'false'),
           SettingsCompanion.insert(key: 'vision_api_key', value: ''),
-          SettingsCompanion.insert(key: 'theme', value: 'light'),
+          SettingsCompanion.insert(key: 'theme', value: 'system'),
           SettingsCompanion.insert(key: 'library_path', value: ''),
         ]);
       });
@@ -45,6 +45,9 @@ class AppDatabase extends _$AppDatabase {
     onUpgrade: (Migrator migrator, int from, int to) async {
       if (from < 2) {
         await migrator.addColumn(books, books.lastReadPage);
+      }
+      if (from < 3) {
+        await migrator.addColumn(books, books.lastScrollOffset);
       }
     },
   );

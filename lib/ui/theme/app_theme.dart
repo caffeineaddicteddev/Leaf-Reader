@@ -4,6 +4,52 @@ import 'package:flutter/services.dart';
 class AppTheme {
   const AppTheme._();
 
+  static final SwitchThemeData _lightSwitchTheme = SwitchThemeData(
+    thumbColor: WidgetStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(WidgetState.selected)) {
+        return const Color(0xFF1A1A2E);
+      }
+      return const Color(0xFFFCFCFD);
+    }),
+    trackColor: WidgetStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(WidgetState.selected)) {
+        return const Color(0x731A1A2E);
+      }
+      return const Color(0xFFD4D9E6);
+    }),
+    trackOutlineColor: WidgetStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(WidgetState.selected)) {
+        return const Color(0x401A1A2E);
+      }
+      return const Color(0xB03C4048);
+    }),
+    trackOutlineWidth: const WidgetStatePropertyAll<double>(1.6),
+    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  );
+
+  static final SwitchThemeData _darkSwitchTheme = SwitchThemeData(
+    thumbColor: WidgetStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(WidgetState.selected)) {
+        return const Color(0xFFE8E6D9);
+      }
+      return const Color(0xFF52525B);
+    }),
+    trackColor: WidgetStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(WidgetState.selected)) {
+        return const Color(0x73E8E6D9);
+      }
+      return const Color(0xFF232329);
+    }),
+    trackOutlineColor: WidgetStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(WidgetState.selected)) {
+        return const Color(0x45E8E6D9);
+      }
+      return const Color(0xFF5A5A64);
+    }),
+    trackOutlineWidth: const WidgetStatePropertyAll<double>(1.6),
+    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  );
+
   static final ThemeData lightTheme = ThemeData(
     useMaterial3: true,
     colorScheme: ColorScheme.light(
@@ -39,6 +85,7 @@ class AppTheme {
       elevation: 0,
       backgroundColor: Color(0xFFFFFFFF),
     ),
+    switchTheme: _lightSwitchTheme,
   );
 
   static final ThemeData darkTheme = ThemeData(
@@ -82,5 +129,6 @@ class AppTheme {
       selectedItemColor: Color(0xFFE8E6D9),
       unselectedItemColor: Color(0x66E8E6D9),
     ),
+    switchTheme: _darkSwitchTheme,
   );
 }

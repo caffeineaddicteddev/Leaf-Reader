@@ -95,6 +95,52 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
     return _activeTask;
   }
 
+  Future<void> continueProcessing() async {
+    if (_activeTask != null) {
+      return _activeTask;
+    }
+    final Book? book = await _bookRepository.getBook(_bookId);
+    if (book == null || book.status != BookProcessingState.processing) {
+      return;
+    }
+    final String statePath = await _fileService.getProcessingStatePath(
+      book.folderName,
+    );
+    final ProcessingContinuationState persisted = await _processingStateManager
+        .read(statePath);
+    final int totalPages = book.totalPages > 0
+        ? book.totalPages
+        : await _fileService.getPageCount(await _fileService.getPdfPath(book));
+
+    _cancelRequested = false;
+    _disableAiRequested = false;
+    _cancelMode = _CancelMode.none;
+    state = _statusFromPersistedState(
+      book: book,
+      persisted: persisted,
+      totalPages: totalPages,
+    );
+
+    if (!persisted.bootstrapComplete &&
+        (persisted.ocrPending ||
+            (persisted.aiEnabledForBook && persisted.aiPending))) {
+      _activeTask = _runBootstrapResume(
+        book: book,
+        totalPages: totalPages,
+        statePath: statePath,
+        persisted: persisted,
+      );
+      return _activeTask;
+    }
+
+    if (persisted.bootstrapComplete &&
+        (persisted.ocrPending ||
+            (persisted.aiEnabledForBook && persisted.aiPending))) {
+      _activeTask = _runContinuation();
+      return _activeTask;
+    }
+  }
+
   Future<PipelineCancelResult> cancelPipeline() async {
     if (_activeTask == null) {
       state = ProcessingStatus.idle();
@@ -307,6 +353,116 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
         totalPages: totalPages,
         ocrCompletedPages: bootstrapEnd,
         aiCompletedPages: aiEnabled ? bootstrapEnd : 0,
+        readerReady: true,
+      );
+    } catch (error) {
+      await _markBookError();
+      state = ProcessingStatus(
+        phase: ProcessingPhase.error,
+        currentPage: 0,
+        totalPages: state.totalPages,
+        ocrCompletedPages: state.ocrCompletedPages,
+        aiCompletedPages: state.aiCompletedPages,
+        readerReady: state.readerReady,
+        errorMessage: error.toString(),
+      );
+    } finally {
+      await _platformChannel.destroyTesseract();
+      _activeTask = null;
+    }
+  }
+
+  Future<void> _runBootstrapResume({
+    required Book book,
+    required int totalPages,
+    required String statePath,
+    required ProcessingContinuationState persisted,
+  }) async {
+    try {
+      final AppSettings settings = await _ref.read(settingsProvider.future);
+      final OcrLanguage language = LanguageRegistry.byCode(book.languageCode);
+      final String pdfPath = await _fileService.getPdfPath(book);
+      final String ocrPath = await _fileService.getOcrJsonPath(book.folderName);
+      final int bootstrapEnd = totalPages < 10 ? totalPages : 10;
+      final int startOcrPage = persisted.nextOcrPage.clamp(1, bootstrapEnd + 1);
+
+      if (startOcrPage <= bootstrapEnd) {
+        await _prepareLanguage(language, totalPages, statePath);
+        if (await _handleCancellation(book, statePath)) {
+          return;
+        }
+
+        await _runOcr(
+          bookId: book.id,
+          pdfPath: pdfPath,
+          ocrPath: ocrPath,
+          language: language,
+          totalPages: totalPages,
+          statePath: statePath,
+          startPage: startOcrPage,
+          endPage: bootstrapEnd,
+        );
+        if (await _handleCancellation(book, statePath)) {
+          return;
+        }
+
+        await _processingStateManager.update(
+          filePath: statePath,
+          transform: (ProcessingContinuationState current) =>
+              current.copyWith(nextOcrPage: bootstrapEnd + 1),
+        );
+      }
+
+      final ProcessingContinuationState afterOcr = await _processingStateManager
+          .read(statePath);
+      if (afterOcr.aiEnabledForBook && !afterOcr.firstGeminiBatchComplete) {
+        await _runBootstrapGeminiCleanup(
+          book: book,
+          totalPages: totalPages,
+          statePath: statePath,
+          settings: settings,
+        );
+        if (await _handleCancellation(book, statePath)) {
+          return;
+        }
+      }
+
+      final bool hasContinuation = bootstrapEnd < totalPages;
+      final bool aiEnabled = afterOcr.aiEnabledForBook;
+      final String continuationMode = aiEnabled ? 'staged_ai' : 'ocr_only';
+      await _processingStateManager.update(
+        filePath: statePath,
+        transform: (ProcessingContinuationState current) => current.copyWith(
+          bootstrapComplete: true,
+          readerReady: true,
+          continuationMode: hasContinuation ? continuationMode : 'none',
+          aiEnabledForBook: aiEnabled,
+          aiCanceledByUser: !aiEnabled,
+          ocrPending: hasContinuation,
+          aiPending: aiEnabled && hasContinuation,
+          nextOcrPage: bootstrapEnd + 1,
+          nextAiPage: aiEnabled ? current.nextAiPage : 1,
+          nextAiCharOffset: aiEnabled ? current.nextAiCharOffset : 0,
+          firstGeminiBatchComplete: aiEnabled,
+          nativeOcrActive: false,
+        ),
+      );
+
+      if (!hasContinuation) {
+        await _bookRepository.updateProgress(
+          id: book.id,
+          ocrProgress: totalPages,
+          aiProgress: aiEnabled ? totalPages : book.aiProgress,
+          status: BookProcessingState.ready.name,
+        );
+      }
+
+      state = ProcessingStatus(
+        phase: ProcessingPhase.done,
+        currentPage: bootstrapEnd,
+        totalPages: totalPages,
+        ocrCompletedPages: bootstrapEnd,
+        aiCompletedPages: aiEnabled ? bootstrapEnd : book.aiProgress,
         readerReady: true,
       );
     } catch (error) {
@@ -688,7 +844,7 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
           'Tesseract language data could not be prepared.',
         );
       }
-      await _platformChannel.initTesseract();
+      await _platformChannel.initTesseract(language.tessCode!);
       await _processingStateManager.update(
         filePath: statePath,
         transform: (ProcessingContinuationState current) =>
@@ -799,6 +955,74 @@ class PipelineNotifier extends StateNotifier<ProcessingStatus> {
         status: BookProcessingState.error.name,
       );
     }
+  }
+
+  ProcessingStatus _statusFromPersistedState({
+    required Book book,
+    required ProcessingContinuationState persisted,
+    required int totalPages,
+  }) {
+    final int bootstrapEnd = totalPages < 10 ? totalPages : 10;
+    if (!persisted.bootstrapComplete) {
+      final int ocrCompletedPages = (persisted.nextOcrPage - 1).clamp(
+        0,
+        bootstrapEnd,
+      );
+      if (persisted.ocrPending && persisted.nextOcrPage <= bootstrapEnd) {
+        return ProcessingStatus(
+          phase: ProcessingPhase.ocr,
+          currentPage: persisted.nextOcrPage.clamp(1, bootstrapEnd),
+          totalPages: totalPages,
+          ocrCompletedPages: ocrCompletedPages,
+          aiCompletedPages: book.aiProgress,
+          readerReady: false,
+        );
+      }
+      if (persisted.aiEnabledForBook && !persisted.firstGeminiBatchComplete) {
+        final int currentAiPage = book.aiProgress > 0
+            ? book.aiProgress.clamp(1, bootstrapEnd)
+            : bootstrapEnd;
+        return ProcessingStatus(
+          phase: ProcessingPhase.aiCleanup,
+          currentPage: currentAiPage,
+          totalPages: totalPages,
+          ocrCompletedPages: bootstrapEnd,
+          aiCompletedPages: book.aiProgress,
+          readerReady: false,
+        );
+      }
+    }
+
+    if (persisted.aiEnabledForBook && persisted.aiPending) {
+      return ProcessingStatus(
+        phase: ProcessingPhase.aiCleanup,
+        currentPage: persisted.nextAiPage.clamp(1, totalPages),
+        totalPages: totalPages,
+        ocrCompletedPages: book.ocrProgress,
+        aiCompletedPages: book.aiProgress,
+        readerReady: persisted.readerReady,
+      );
+    }
+
+    if (persisted.ocrPending) {
+      return ProcessingStatus(
+        phase: ProcessingPhase.ocr,
+        currentPage: persisted.nextOcrPage.clamp(1, totalPages),
+        totalPages: totalPages,
+        ocrCompletedPages: book.ocrProgress,
+        aiCompletedPages: book.aiProgress,
+        readerReady: persisted.readerReady,
+      );
+    }
+
+    return ProcessingStatus(
+      phase: ProcessingPhase.idle,
+      currentPage: 0,
+      totalPages: totalPages,
+      ocrCompletedPages: book.ocrProgress,
+      aiCompletedPages: book.aiProgress,
+      readerReady: persisted.readerReady,
+    );
   }
 
   bool _hasRemainingAiWork(ProcessingContinuationState state, int totalPages) {

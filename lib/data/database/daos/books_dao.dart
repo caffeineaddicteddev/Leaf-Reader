@@ -11,6 +11,12 @@ class BooksDao extends DatabaseAccessor<AppDatabase> with _$BooksDaoMixin {
 
   Stream<List<Book>> watchAllBooks() => select(books).watch();
 
+  Stream<Book?> watchBook(String id) {
+    return (select(
+      books,
+    )..where(($BooksTable table) => table.id.equals(id))).watchSingleOrNull();
+  }
+
   Future<Book?> getBook(String id) {
     return (select(
       books,
@@ -72,6 +78,20 @@ class BooksDao extends DatabaseAccessor<AppDatabase> with _$BooksDaoMixin {
     )..where(($BooksTable table) => table.id.equals(id))).write(
       BooksCompanion(
         lastReadPage: Value<int>(lastReadPage),
+        updatedAt: Value<String>(DateTime.now().toIso8601String()),
+      ),
+    );
+  }
+
+  Future<void> updateLastScrollOffset({
+    required String id,
+    required double lastScrollOffset,
+  }) {
+    return (update(
+      books,
+    )..where(($BooksTable table) => table.id.equals(id))).write(
+      BooksCompanion(
+        lastScrollOffset: Value<double>(lastScrollOffset),
         updatedAt: Value<String>(DateTime.now().toIso8601String()),
       ),
     );

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,31 +20,50 @@ class ProcessingScreen extends ConsumerStatefulWidget {
 
 class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
   bool _didNavigateToReader = false;
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(pipelineProvider(widget.bookId).notifier).continueProcessing();
+    });
+    _refreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (!mounted) {
+        return;
+      }
+      ref.read(pipelineProvider(widget.bookId).notifier).continueProcessing();
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final String bookId = widget.bookId;
     final status = ref.watch(pipelineProvider(bookId));
-    final bookAsync = ref.watch(bookProvider(bookId));
-    if (status.readerReady && !_didNavigateToReader) {
-      _didNavigateToReader = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          context.go(AppRoutes.reader(bookId));
-        }
-      });
-    }
+    final bookAsync = ref.watch(bookStreamProvider(bookId));
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (bool didPop, Object? result) {
         if (!didPop && mounted) {
-          context.go(AppRoutes.library);
+          context.go(
+            AppRoutes.library,
+            extra: AppNavigationDirection.backward,
+          );
         }
       },
       child: Scaffold(
         appBar: AppBar(
           leading: IconButton(
-            onPressed: () => context.go(AppRoutes.library),
+            onPressed: () => context.go(
+              AppRoutes.library,
+              extra: AppNavigationDirection.backward,
+            ),
             icon: const Icon(Icons.arrow_back),
             tooltip: 'Back to library',
           ),
@@ -50,9 +71,11 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
             IconButton(
               onPressed: () async {
                 await ref.read(pipelineProvider(bookId).notifier).deleteBook();
-                ref.invalidate(bookProvider(bookId));
                 if (context.mounted) {
-                  context.go(AppRoutes.library);
+                  context.go(
+                    AppRoutes.library,
+                    extra: AppNavigationDirection.backward,
+                  );
                 }
               },
               icon: const Icon(Icons.delete_outline),
@@ -64,6 +87,24 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
           data: (book) {
             if (book == null) {
               return const Center(child: Text('Book not found.'));
+            }
+            final bool shouldOpenReader =
+                !_didNavigateToReader &&
+                (status.readerReady ||
+                    book.status == BookProcessingState.ready);
+            if (shouldOpenReader) {
+              _didNavigateToReader = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  context.go(
+                    AppRoutes.reader(
+                      bookId,
+                      initialScrollOffset: book.lastScrollOffset,
+                    ),
+                    extra: AppNavigationDirection.forward,
+                  );
+                }
+              });
             }
             return Center(
               child: Padding(
@@ -116,17 +157,28 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
                         final PipelineCancelResult result = await ref
                             .read(pipelineProvider(bookId).notifier)
                             .cancelPipeline();
-                        ref.invalidate(bookProvider(bookId));
                         if (!context.mounted) {
                           return;
                         }
                         switch (result) {
                           case PipelineCancelResult.deleted:
-                            context.go(AppRoutes.library);
+                            context.go(
+                              AppRoutes.library,
+                              extra: AppNavigationDirection.backward,
+                            );
                           case PipelineCancelResult.keptOcr:
-                            context.go(AppRoutes.reader(bookId));
+                            context.go(
+                              AppRoutes.reader(
+                                bookId,
+                                initialScrollOffset: book.lastScrollOffset,
+                              ),
+                              extra: AppNavigationDirection.forward,
+                            );
                           case PipelineCancelResult.none:
-                            context.go(AppRoutes.library);
+                            context.go(
+                              AppRoutes.library,
+                              extra: AppNavigationDirection.backward,
+                            );
                         }
                       },
                       child: const Text('Cancel Task'),

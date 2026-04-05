@@ -28,7 +28,9 @@ class FileService {
 
   Future<String> createBookFolder(String bookName, String uuid) async {
     final Directory root = await _libraryRoot();
-    final String folderName = '${bookName.toFolderSlug()}_$uuid';
+    final String slug = bookName.toFolderSlug();
+    final String folderName =
+        '${slug.isEmpty ? 'book' : slug}_$uuid';
     final Directory folder = Directory(p.join(root.path, folderName));
     await folder.create(recursive: true);
     return folder.path;

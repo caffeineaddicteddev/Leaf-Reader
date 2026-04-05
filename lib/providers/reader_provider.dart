@@ -37,7 +37,7 @@ final continuationStateProvider =
       String bookId,
     ) async {
       ref.watch(readerRefreshProvider(bookId));
-      final Book? book = await ref.watch(bookProvider(bookId).future);
+      final Book? book = await ref.watch(latestBookProvider(bookId).future);
       if (book == null) {
         return ProcessingContinuationState.initial(bookId);
       }
@@ -77,7 +77,7 @@ final readerViewProvider = FutureProvider.family<ReaderViewData, String>((
   String bookId,
 ) async {
   ref.watch(readerRefreshProvider(bookId));
-  final Book? book = await ref.watch(bookProvider(bookId).future);
+  final Book? book = await ref.watch(latestBookProvider(bookId).future);
   if (book == null) {
     return const ReaderViewData(
       blocks: <ReaderBlock>[],

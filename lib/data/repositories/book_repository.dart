@@ -13,6 +13,12 @@ class BookRepository {
     );
   }
 
+  Stream<domain.Book?> watchBook(String id) {
+    return _database.booksDao.watchBook(id).map(
+      (Book? row) => row == null ? null : _mapBook(row),
+    );
+  }
+
   Future<domain.Book?> getBook(String id) async {
     final Book? row = await _database.booksDao.getBook(id);
     return row == null ? null : _mapBook(row);
@@ -74,6 +80,16 @@ class BookRepository {
     );
   }
 
+  Future<void> updateLastScrollOffset({
+    required String id,
+    required double lastScrollOffset,
+  }) {
+    return _database.booksDao.updateLastScrollOffset(
+      id: id,
+      lastScrollOffset: lastScrollOffset,
+    );
+  }
+
   domain.Book _mapBook(Book row) {
     return domain.Book(
       id: row.id,
@@ -86,6 +102,7 @@ class BookRepository {
       ocrProgress: row.ocrProgress,
       aiProgress: row.aiProgress,
       lastReadPage: row.lastReadPage,
+      lastScrollOffset: row.lastScrollOffset,
       languageCode: row.languageCode,
       status: BookProcessingState.values.firstWhere(
         (BookProcessingState state) => state.name == row.status,

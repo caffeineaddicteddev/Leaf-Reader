@@ -32,3 +32,17 @@ final bookProvider = FutureProvider.family<Book?, String>((
 ) {
   return ref.watch(bookRepositoryProvider).getBook(bookId);
 });
+
+final latestBookProvider = FutureProvider.family<Book?, String>((
+  Ref ref,
+  String bookId,
+) {
+  return ref.read(bookRepositoryProvider).getBook(bookId);
+});
+
+final bookStreamProvider = StreamProvider.family<Book?, String>((
+  Ref ref,
+  String bookId,
+) {
+  return ref.watch(bookRepositoryProvider).watchBook(bookId);
+});
