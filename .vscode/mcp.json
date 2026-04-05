@@ -1,0 +1,17 @@
+{
+  "servers": {
+    "dart": {
+      "type": "stdio",
+      "command": "dart",
+      "args": [
+        "mcp-server",
+        "--dart-sdk",
+        "C:\\Flutter\\flutter\\bin\\cache\\dart-sdk",
+        "--flutter-sdk",
+        "C:\\Flutter\\flutter",
+        "--force-roots-fallback"
+      ],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}
